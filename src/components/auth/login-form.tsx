@@ -142,7 +142,6 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
       });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed.");
-    } finally {
       setLoading(false);
     }
   }
@@ -164,7 +163,6 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
       });
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Login failed.");
-    } finally {
       setLoading(false);
     }
   }
@@ -203,6 +201,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
 
       if (!response.ok) {
         setError(data?.message ?? "Sign up failed.");
+        setLoading(false);
         return;
       }
 
@@ -213,7 +212,6 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
       });
     } catch {
       setError("Sign up failed. Please try again.");
-    } finally {
       setLoading(false);
     }
   }
