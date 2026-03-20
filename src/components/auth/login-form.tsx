@@ -42,6 +42,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
+  const isBusy = loading || sendingCode;
 
   const canSendCode = useMemo(
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()),
@@ -264,6 +265,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               {mode === "register" ? "Already have an account? " : "Don't have an account? "}
               <button
                 className="underline underline-offset-4 hover:text-primary"
+                disabled={isBusy}
                 onClick={() => switchMode(mode === "register" ? "password" : "register")}
                 type="button"
               >
@@ -278,6 +280,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               <Input
                 id="name"
                 autoComplete="name"
+                disabled={isBusy}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Your name"
                 type="text"
@@ -291,6 +294,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
             <Input
               id="email"
               autoComplete="email"
+              disabled={isBusy}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="m@example.com"
               type="email"
@@ -304,6 +308,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               <Input
                 id="password"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
+                disabled={isBusy}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="At least 8 characters"
                 type="password"
@@ -318,6 +323,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               <Input
                 id="confirm-password"
                 autoComplete="new-password"
+                disabled={isBusy}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="Re-enter your password"
                 type="password"
@@ -331,6 +337,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               <FieldLabel htmlFor="code">Verification Code</FieldLabel>
               <Input
                 id="code"
+                disabled={isBusy}
                 onChange={(event) => setCode(event.target.value)}
                 placeholder="6-digit code"
                 type="text"
@@ -350,7 +357,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
           )}
 
           <Field>
-            <Button type="submit" size="lg" disabled={loading || sendingCode}>
+            <Button type="submit" size="lg" disabled={isBusy}>
               {mode === "register"
                 ? loading
                   ? "Creating..."
@@ -374,6 +381,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               {mode === "email-code" ? (
                 <button
                   className="underline underline-offset-4 hover:text-primary"
+                  disabled={isBusy}
                   onClick={() => switchMode("password")}
                   type="button"
                 >
@@ -382,6 +390,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               ) : (
                 <button
                   className="underline underline-offset-4 hover:text-primary"
+                  disabled={isBusy}
                   onClick={() => switchMode("email-code")}
                   type="button"
                 >
@@ -396,7 +405,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
           <Field className="grid gap-4 sm:grid-cols-2">
             <Button
               size="lg"
-              disabled={loading}
+              disabled={isBusy}
               onClick={() => handleSocialSignIn("apple")}
               type="button"
               variant="outline"
@@ -411,7 +420,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
             </Button>
             <Button
               size="lg"
-              disabled={loading}
+              disabled={isBusy}
               onClick={() => handleSocialSignIn("google")}
               type="button"
               variant="outline"

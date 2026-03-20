@@ -1,34 +1,51 @@
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient as PostgresPrismaClient } from "@prisma/client";
+import { PrismaClient as LocalPrismaClient } from "@/generated/prisma-local";
 import { Pool } from "pg";
 
 const globalForPrisma = globalThis as unknown as {
-  prisma?: PrismaClient;
+  prisma?: unknown;
 };
 
 const isVercelProduction = process.env.VERCEL_ENV === "production";
 
-const connectionString = isVercelProduction
-  ? process.env.POSTGRES_PRISMA_URL ?? process.env.DATABASE_URL
-  : process.env.LOCAL_DATABASE_URL ??
-    process.env.POSTGRES_PRISMA_URL ??
-    process.env.DATABASE_URL;
+const localDatabaseUrl =
+  process.env.LOCAL_DATABASE_URL ?? process.env.DATABASE_URL ?? "file:./dev.db";
+const postgresUrl =
+  process.env.POSTGRES_PRISMA_URL ??
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.DATABASE_URL;
 
-if (!connectionString) {
-  throw new Error(
-    "Missing PostgreSQL URL. Set LOCAL_DATABASE_URL for local dev, and POSTGRES_PRISMA_URL for Vercel.",
-  );
-}
+const useLocalSqlite = !isVercelProduction && localDatabaseUrl.startsWith("file:");
 
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
+const logLevel =
+  process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"];
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
+const prismaClient = useLocalSqlite
+  ? new LocalPrismaClient({
+      adapter: new PrismaBetterSqlite3({
+        url: localDatabaseUrl,
+      }),
+      log: logLevel,
+    })
+  : (() => {
+      if (!postgresUrl || postgresUrl.startsWith("file:")) {
+        throw new Error(
+          "Missing PostgreSQL URL. Set POSTGRES_PRISMA_URL (or POSTGRES_URL_NON_POOLING) for production/local-postgres.",
+        );
+      }
+
+      const pool = new Pool({ connectionString: postgresUrl });
+      const adapter = new PrismaPg(pool);
+
+      return new PostgresPrismaClient({
+        adapter,
+        log: logLevel,
+      });
+    })();
+
+export const prisma = (globalForPrisma.prisma ?? prismaClient) as PostgresPrismaClient;
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
