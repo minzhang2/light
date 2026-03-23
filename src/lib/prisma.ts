@@ -19,7 +19,7 @@ const postgresUrl =
 
 const useLocalSqlite = !isVercelProduction && localDatabaseUrl.startsWith("file:");
 
-const logLevel =
+const logLevel: ("error" | "warn")[] =
   process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"];
 
 const prismaClient = useLocalSqlite
