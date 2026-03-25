@@ -59,7 +59,7 @@ export function ChineseDatePicker({ markers = [] }: ChineseDatePickerProps) {
 
   return (
     <SidebarGroup className="px-0">
-      <SidebarGroupContent>
+      <SidebarGroupContent className="w-full">
         <LunarDataContext.Provider value={{ lunarData, markers }}>
           <Calendar
             mode="single"
@@ -68,7 +68,17 @@ export function ChineseDatePicker({ markers = [] }: ChineseDatePickerProps) {
             month={displayMonth}
             onMonthChange={setDisplayMonth}
             captionLayout="label"
-            className="bg-transparent [--cell-size:2.1rem]"
+            className="w-full bg-transparent"
+            style={
+              {
+                "--cell-size": "clamp(2.4rem, calc((100% - 1rem) / 7), 3rem)",
+              } as React.CSSProperties
+            }
+            classNames={{
+              root: "w-full",
+              weekday: "flex-1",
+              day: "flex-1 min-w-0",
+            }}
             components={{
               DayButton: ChineseDayButton,
             }}
@@ -144,7 +154,7 @@ function ChineseDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        "relative isolate z-10 flex aspect-auto size-auto h-auto w-full min-w-(--cell-size) flex-col gap-0 border-0 py-0.5 leading-none font-normal",
+        "relative isolate z-10 flex aspect-auto size-auto h-auto w-full min-w-0 flex-col gap-0 border-0 py-0.5 leading-none font-normal",
         "group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50",
         "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground",
         "data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground",

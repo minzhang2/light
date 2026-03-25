@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import Link from "next/link"
 
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar"
 
@@ -18,9 +19,12 @@ export function TeamSwitcher({
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <div className="px-2 py-1 text-sm font-medium text-sidebar-foreground">
+        <Link
+          href="/dashboard"
+          className="block px-2 py-1 text-sm font-medium text-sidebar-foreground hover:text-sidebar-foreground/80 transition-colors"
+        >
           light
-        </div>
+        </Link>
       </SidebarMenuItem>
     </SidebarMenu>
   )

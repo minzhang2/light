@@ -19,17 +19,20 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar"
 import {
   ChevronsUpDownIcon,
-  BadgeCheckIcon,
   BellIcon,
-  LogOutIcon,
   BadgePlusIcon,
   ShieldCheckIcon,
+  UserRoundIcon,
 } from "lucide-react"
-import { signOut } from "next-auth/react"
+import {
+  SignOutDropdownMenuItem,
+  SignOutSidebarMenuItem,
+} from "@/components/auth/sign-out-button"
 
 export function NavUser({
   user,
@@ -88,8 +91,7 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => router.push("/dashboard/account")}>
-                <BadgeCheckIcon
-                />
+                <UserRoundIcon />
                 账户中心
               </DropdownMenuItem>
               {user.canAccessAdminConsole ? (
@@ -112,15 +114,80 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
-                <LogOutIcon
-                />
-                退出登录
-              </DropdownMenuItem>
+              <SignOutDropdownMenuItem />
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+  )
+}
+
+export function NavUserPanel({
+  user,
+}: {
+  user: {
+    name: string
+    email: string
+    avatar?: string
+    canAccessAdminConsole?: boolean
+    canAccessInvites?: boolean
+  }
+}) {
+  const router = useRouter()
+  const avatarFallback = user.name.slice(0, 1).toUpperCase()
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 px-3 py-3">
+        <Avatar>
+          <AvatarImage src={user.avatar} alt={user.name} />
+          <AvatarFallback>{avatarFallback}</AvatarFallback>
+        </Avatar>
+        <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+          <span className="truncate font-medium">{user.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+        </div>
+      </div>
+
+      <SidebarSeparator className="mx-0" />
+
+      <SidebarMenu className="px-2 py-2">
+        <SidebarMenuItem>
+          <SidebarMenuButton onClick={() => router.push("/dashboard/account")} size="lg">
+            <UserRoundIcon />
+            <span>账户中心</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        {user.canAccessAdminConsole ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={() => router.push("/dashboard/admin")} size="lg">
+              <ShieldCheckIcon />
+              <span>管理后台</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
+        {user.canAccessInvites ? (
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={() => router.push("/dashboard/invites")} size="lg">
+              <BadgePlusIcon />
+              <span>邀请码</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        ) : null}
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg">
+            <BellIcon />
+            <span>通知设置</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+
+      <SidebarSeparator className="mx-0" />
+
+      <SidebarMenu className="px-2 py-2">
+        <SignOutSidebarMenuItem />
+      </SidebarMenu>
+    </div>
   )
 }

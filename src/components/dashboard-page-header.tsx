@@ -4,6 +4,7 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
+import { DashboardMobileAsideTrigger } from "@/components/dashboard-mobile-aside";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -40,6 +41,7 @@ export function DashboardPageHeader({
             </p>
           ) : null}
         </div>
+        <DashboardMobileAsideTrigger />
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
     </header>

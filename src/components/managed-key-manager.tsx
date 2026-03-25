@@ -151,13 +151,23 @@ function getToneClassName(tone: Notice["tone"]) {
 function ActionIconButton({
   tooltip,
   children,
+  className,
   ...props
 }: React.ComponentProps<typeof Button> & {
   tooltip: string;
 }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button size="icon-lg" variant="outline" {...props} />}>
+      <TooltipTrigger
+        render={
+          <Button
+            size="icon-lg"
+            variant="outline"
+            className={className ?? "size-8 rounded-[0.9rem] md:size-9 md:rounded-lg"}
+            {...props}
+          />
+        }
+      >
         {children}
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
@@ -193,7 +203,7 @@ function TestMessage({
         : "border-border bg-muted/50 text-muted-foreground";
 
   return (
-    <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
+    <div className={`rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
       {expanded || !isCollapsible ? (
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1 break-all whitespace-pre-wrap">{message}</p>
@@ -512,156 +522,56 @@ function ManagedKeyCard({
   onSaveEdit: () => void;
   onToggleModelFilter: (model: string | null) => void;
 }) {
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const visibleModels = getKeyAvailableModels(item);
+  const hasExpandableContent = visibleModels.length > 0 || !!item.lastTestMessage || isEditing;
+  const expanded = isEditing || detailsExpanded;
 
   return (
-    <article className="flex flex-col rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <StatusDot status={item.lastTestStatus} />
-          <h3 className="font-semibold">{item.name}</h3>
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-            {GROUP_LABELS[item.group]}
-          </span>
-          {item.isPinned ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-              置顶
-            </span>
-          ) : null}
-          {!item.isTestable ? (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              禁测
-            </span>
-          ) : null}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {formatDateTime(item.lastTestAt)}
-        </span>
-      </div>
-
-      {isEditing && editDraft ? (
-        <div className="mt-3 space-y-3">
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-foreground/60">名称</span>
-              <Input
-                value={editDraft.name}
-                onChange={(event) =>
-                  onChangeEditDraft({ name: event.target.value })
-                }
-                placeholder="名称"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-foreground/60">Base URL</span>
-              <Input
-                value={editDraft.baseUrl}
-                onChange={(event) =>
-                  onChangeEditDraft({ baseUrl: event.target.value })
-                }
-                placeholder="https://api.example.com"
-              />
-            </label>
+    <article className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+      {/* Main row */}
+      <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="pt-1 md:pt-0">
+            <StatusDot status={item.lastTestStatus} />
           </div>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-foreground/60">密钥</span>
-            <Input
-              value={editDraft.secret}
-              onChange={(event) =>
-                onChangeEditDraft({ secret: event.target.value })
-              }
-              placeholder="sk-..."
-            />
-          </label>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-foreground/60">默认模型</span>
-              <Input
-                value={editDraft.model}
-                onChange={(event) =>
-                  onChangeEditDraft({ model: event.target.value })
-                }
-                placeholder="可留空"
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-medium text-foreground/60">启动命令</span>
-              <Select
-                value={editDraft.launchCommand || EMPTY_LAUNCH_COMMAND}
-                onValueChange={(value) =>
-                  onChangeEditDraft({
-                    launchCommand:
-                      value === EMPTY_LAUNCH_COMMAND
-                        ? ""
-                        : (value as EditDraft["launchCommand"]),
-                  })
-                }
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <h3 className="truncate text-sm font-semibold leading-5">{item.name}</h3>
+                  {item.isPinned ? (
+                    <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">顶</span>
+                  ) : null}
+                  {!item.isTestable ? (
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">禁</span>
+                  ) : null}
+                </div>
+              </div>
+              <span className="shrink-0 text-[11px] text-muted-foreground md:hidden">
+                {formatDateTime(item.lastTestAt)}
+              </span>
+            </div>
+            <div className="grid gap-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center md:gap-x-4">
+              <a
+                href={item.baseUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate transition-colors hover:text-foreground hover:underline"
+                onClick={(e) => e.stopPropagation()}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={EMPTY_LAUNCH_COMMAND}>无</SelectItem>
-                  <SelectItem value="claude">claude</SelectItem>
-                  <SelectItem value="codex">codex</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>协议：{item.protocol}</span>
-            <span>分组：{GROUP_LABELS[item.group]}</span>
+                {item.baseUrl}
+              </a>
+              <span className="truncate font-mono">
+                {isRevealed ? item.secret : item.maskedSecret}
+              </span>
+              <span className="hidden shrink-0 text-right md:block md:w-20">
+                {formatDateTime(item.lastTestAt)}
+              </span>
+            </div>
           </div>
         </div>
-      ) : (
-        <div className="mt-3 space-y-1.5 text-sm text-muted-foreground">
-          <p className="break-all">
-            <span className="text-xs font-medium text-foreground/60">URL</span>{" "}
-            {item.baseUrl}
-          </p>
-          <p className="break-all font-mono text-[13px]">
-            <span className="font-sans text-xs font-medium text-foreground/60">Token</span>{" "}
-            {isRevealed ? item.secret : item.maskedSecret}
-          </p>
-          {item.model ? (
-            <p>
-              <span className="text-xs font-medium text-foreground/60">Model</span>{" "}
-              {item.model}
-            </p>
-          ) : null}
-          <p>
-            <span className="text-xs font-medium text-foreground/60">测试</span>{" "}
-            {item.isTestable ? "已启用" : "已禁用"}
-          </p>
-        </div>
-      )}
-
-      {visibleModels.length > 0 ? (
-        <div className="mt-3">
-          <p className="mb-1.5 text-xs font-medium text-foreground/60">
-            可用模型
-          </p>
-          <AvailableModelTags
-          models={visibleModels}
-          effectiveModelFilter={
-            effectiveModelFilter && visibleModels.includes(effectiveModelFilter)
-              ? effectiveModelFilter
-              : null
-          }
-          onToggleModelFilter={onToggleModelFilter}
-        />
-        </div>
-      ) : null}
-
-      {item.lastTestMessage ? (
-        <TestMessage
-          message={item.lastTestMessage}
-          status={item.lastTestStatus}
-        />
-      ) : null}
-
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid w-full grid-cols-9 gap-1.5 sm:grid-cols-6 md:flex md:w-auto md:items-center md:justify-end md:gap-1">
           <ActionIconButton
             type="button"
             tooltip={isRevealed ? "隐藏" : "显示"}
@@ -671,17 +581,8 @@ function ManagedKeyCard({
           </ActionIconButton>
           <ActionIconButton
             type="button"
-            tooltip="编辑"
-            onClick={isEditing ? onCancelEdit : onStartEdit}
-            disabled={isDeleting || isTesting || isBatchTesting || isSaving}
-          >
-            <PencilIcon />
-          </ActionIconButton>
-          <ActionIconButton
-            type="button"
             tooltip="复制 Key"
             onClick={onCopyKey}
-            disabled={isEditing}
           >
             <CopyIcon />
           </ActionIconButton>
@@ -689,10 +590,36 @@ function ManagedKeyCard({
             type="button"
             tooltip="复制环境变量"
             onClick={onCopyEnv}
-            disabled={isEditing}
           >
             <FileCode2Icon />
           </ActionIconButton>
+          <ActionIconButton
+            type="button"
+            tooltip={isEditing ? "取消编辑" : "编辑"}
+            onClick={isEditing ? onCancelEdit : onStartEdit}
+            disabled={isDeleting || isTesting || isBatchTesting || isSaving}
+          >
+            <PencilIcon />
+          </ActionIconButton>
+          {isEditing ? (
+            <ActionIconButton
+              type="button"
+              tooltip={isSaving ? "保存中..." : "保存"}
+              onClick={onSaveEdit}
+              disabled={isSaving}
+            >
+              <CheckIcon className="h-4 w-4" />
+            </ActionIconButton>
+          ) : (
+            <ActionIconButton
+              type="button"
+              tooltip={!item.isTestable ? "已禁测" : isTesting ? "测试中..." : "测试"}
+              onClick={onTest}
+              disabled={!item.isTestable || isTesting || isBatchTesting || isSaving}
+            >
+              <FlaskConicalIcon />
+            </ActionIconButton>
+          )}
           <ActionIconButton
             type="button"
             tooltip={item.isPinned ? "取消置顶" : "置顶"}
@@ -718,39 +645,130 @@ function ManagedKeyCard({
           >
             <Trash2Icon />
           </ActionIconButton>
+          {hasExpandableContent ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-lg"
+              className="size-8 justify-self-start rounded-[0.9rem] md:size-9 md:rounded-lg"
+              onClick={() => setDetailsExpanded((v) => !v)}
+              aria-label={expanded ? "收起" : "展开"}
+            >
+              {expanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
+            </Button>
+          ) : null}
         </div>
-        {isEditing ? (
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={onCancelEdit}
-              disabled={isSaving}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={onSaveEdit}
-              disabled={isSaving}
-            >
-              {isSaving ? "保存中..." : "保存"}
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            onClick={onTest}
-            disabled={!item.isTestable || isTesting || isBatchTesting || isSaving}
-          >
-            <FlaskConicalIcon className="h-4 w-4" />
-            {!item.isTestable ? "已禁测" : isTesting ? "测试中..." : "测试"}
-          </Button>
-        )}
       </div>
+
+      {/* Test message always visible when collapsed */}
+      {!isEditing && !expanded && item.lastTestMessage ? (
+        <div className="px-4 pb-2">
+          <TestMessage message={item.lastTestMessage} status={item.lastTestStatus} />
+        </div>
+      ) : null}
+
+      {/* Expandable detail section */}
+      {expanded && (
+        <div className="border-t border-border/70 px-4 py-3 space-y-3">
+          {isEditing && editDraft ? (
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">名称</span>
+                  <Input
+                    value={editDraft.name}
+                    onChange={(event) => onChangeEditDraft({ name: event.target.value })}
+                    placeholder="名称"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">Base URL</span>
+                  <Input
+                    value={editDraft.baseUrl}
+                    onChange={(event) => onChangeEditDraft({ baseUrl: event.target.value })}
+                    placeholder="https://api.example.com"
+                  />
+                </label>
+              </div>
+              <label className="space-y-1">
+                <span className="text-xs font-medium text-foreground/60">密钥</span>
+                <Input
+                  value={editDraft.secret}
+                  onChange={(event) => onChangeEditDraft({ secret: event.target.value })}
+                  placeholder="sk-..."
+                />
+              </label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">默认模型</span>
+                  <Input
+                    value={editDraft.model}
+                    onChange={(event) => onChangeEditDraft({ model: event.target.value })}
+                    placeholder="可留空"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">启动命令</span>
+                  <Select
+                    value={editDraft.launchCommand || EMPTY_LAUNCH_COMMAND}
+                    onValueChange={(value) =>
+                      onChangeEditDraft({
+                        launchCommand:
+                          value === EMPTY_LAUNCH_COMMAND
+                            ? ""
+                            : (value as EditDraft["launchCommand"]),
+                      })
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={EMPTY_LAUNCH_COMMAND}>无</SelectItem>
+                      <SelectItem value="claude">claude</SelectItem>
+                      <SelectItem value="codex">codex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>协议：{item.protocol}</span>
+                  <span>分组：{GROUP_LABELS[item.group]}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={onCancelEdit} disabled={isSaving}>取消</Button>
+                  <Button type="button" size="sm" onClick={onSaveEdit} disabled={isSaving}>{isSaving ? "保存中..." : "保存"}</Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {!isEditing && item.model ? (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-foreground/50 font-medium">Model</span>
+              <span className="text-muted-foreground">{item.model}</span>
+            </div>
+          ) : null}
+
+          {!isEditing && visibleModels.length > 0 ? (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-foreground/60">可用模型</p>
+              <AvailableModelTags
+                models={visibleModels}
+                effectiveModelFilter={
+                  effectiveModelFilter && visibleModels.includes(effectiveModelFilter)
+                    ? effectiveModelFilter
+                    : null
+                }
+                onToggleModelFilter={onToggleModelFilter}
+              />
+            </div>
+          ) : null}
+
+          {!isEditing && item.lastTestMessage ? (
+            <TestMessage message={item.lastTestMessage} status={item.lastTestStatus} />
+          ) : null}
+        </div>
+      )}
     </article>
   );
 }
@@ -1417,7 +1435,7 @@ export function ManagedKeyManager({
                 </Button>
               </div>
               {showPinned ? (
-                <div className="grid items-start gap-3 xl:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
                   {pinnedKeys.map((key) => (
                     <div key={key.id}>
                       <ManagedKeyCard
@@ -1480,7 +1498,7 @@ export function ManagedKeyManager({
                 </Button>
               </div>
               {showAvailable ? (
-                <div className="grid items-start gap-3 xl:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
                   {availableKeys.map((key) => (
                     <div key={key.id}>
                       <ManagedKeyCard
@@ -1545,7 +1563,7 @@ export function ManagedKeyManager({
                 </Button>
               </div>
               {showOther ? (
-                <div className="grid items-start gap-3 xl:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
                   {otherKeys.map((key) => (
                     <div key={key.id}>
                       <ManagedKeyCard
