@@ -6,10 +6,18 @@ import {
   SidebarGroupContent,
 } from "@/components/ui/sidebar"
 
+function getToday() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
 export function DatePicker() {
-  const [date, setDate] = React.useState<Date | undefined>(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 12)
-  )
+  const [date, setDate] = React.useState<Date | undefined>()
+
+  React.useEffect(() => {
+    setDate(getToday())
+  }, [])
+
   return (
     <SidebarGroup className="px-0">
       <SidebarGroupContent>

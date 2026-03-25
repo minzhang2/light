@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import {
   Avatar,
   AvatarFallback,
@@ -20,7 +21,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import {
+  ChevronsUpDownIcon,
+  BadgeCheckIcon,
+  BellIcon,
+  LogOutIcon,
+  BadgePlusIcon,
+  ShieldCheckIcon,
+} from "lucide-react"
 import { signOut } from "next-auth/react"
 
 export function NavUser({
@@ -30,8 +38,11 @@ export function NavUser({
     name: string
     email: string
     avatar?: string
+    canAccessAdminConsole?: boolean
+    canAccessInvites?: boolean
   }
 }) {
+  const router = useRouter()
   const { isMobile } = useSidebar()
   const avatarFallback = user.name.slice(0, 1).toUpperCase()
 
@@ -76,28 +87,27 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/dashboard/account")}>
                 <BadgeCheckIcon
                 />
-                Account
+                账户中心
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
-                Billing
-              </DropdownMenuItem>
+              {user.canAccessAdminConsole ? (
+                <DropdownMenuItem onClick={() => router.push("/dashboard/admin")}>
+                  <ShieldCheckIcon />
+                  管理后台
+                </DropdownMenuItem>
+              ) : null}
+              {user.canAccessInvites ? (
+                <DropdownMenuItem onClick={() => router.push("/dashboard/invites")}>
+                  <BadgePlusIcon />
+                  邀请码
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem>
                 <BellIcon
                 />
-                Notifications
+                通知设置
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -105,7 +115,7 @@ export function NavUser({
               <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/login" })}>
                 <LogOutIcon
                 />
-                Log out
+                退出登录
               </DropdownMenuItem>
             </DropdownMenuGroup>
           </DropdownMenuContent>

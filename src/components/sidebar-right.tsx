@@ -2,37 +2,13 @@
 
 import * as React from "react"
 
-import { Calendars } from "@/components/calendars"
-import { DatePicker } from "@/components/date-picker"
+import { ChineseDatePicker } from "@/components/chinese-date-picker"
 import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarSeparator,
 } from "@/components/ui/sidebar"
-import { PlusIcon } from "lucide-react"
-
-const data = {
-  calendars: [
-    {
-      name: "My Calendars",
-      items: ["Personal", "Work", "Family"],
-    },
-    {
-      name: "Favorites",
-      items: ["Holidays", "Birthdays"],
-    },
-    {
-      name: "Other",
-      items: ["Travel", "Reminders", "Deadlines"],
-    },
-  ],
-}
 
 export function SidebarRight({
   user,
@@ -42,6 +18,8 @@ export function SidebarRight({
     name: string
     email: string
     avatar?: string
+    canAccessAdminConsole?: boolean
+    canAccessInvites?: boolean
   }
 }) {
   return (
@@ -54,21 +32,8 @@ export function SidebarRight({
         <NavUser user={user} />
       </SidebarHeader>
       <SidebarContent>
-        <DatePicker />
-        <SidebarSeparator className="mx-0" />
-        <Calendars calendars={data.calendars} />
+        <ChineseDatePicker />
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton>
-              <PlusIcon
-              />
-              <span>New Calendar</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   )
 }

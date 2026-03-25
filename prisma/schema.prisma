@@ -13,11 +13,14 @@ model User {
   emailVerified DateTime?
   image         String?
   passwordHash  String?
+  role          String    @default("user")
   accounts      Account[]
   sessions      Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([role])
 }
 
 model Account {
@@ -64,4 +67,44 @@ model EmailOtp {
   createdAt DateTime @default(now())
 
   @@index([email, createdAt])
+}
+
+model InviteCode {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  normalizedCode String   @unique
+  note           String?
+  createdByEmail String?
+  usedByEmail    String?
+  usedAt         DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([usedAt])
+}
+
+model ManagedKey {
+  id              String    @id @default(cuid())
+  name            String
+  aliases         String?
+  groupName       String
+  protocol        String
+  secret          String
+  baseUrl         String
+  model           String?
+  launchCommand   String?
+  extraEnv        String?
+  availableModels String?
+  fingerprint     String    @unique
+  isTestable      Boolean   @default(true)
+  isPinned        Boolean   @default(false)
+  lastTestStatus  String?
+  lastTestMessage String?
+  lastTestAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([groupName, updatedAt])
+  @@index([name])
 }

@@ -34,6 +34,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [code, setCode] = useState("");
@@ -63,6 +64,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     }
     if (nextMode !== "register") {
       setConfirmPassword("");
+      setInviteCode("");
     }
   }
 
@@ -172,8 +174,8 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     event.preventDefault();
     clearNotice();
 
-    if (!email || !password || !confirmPassword) {
-      setError("Please enter email, password, and confirm password.");
+    if (!email || !inviteCode || !password || !confirmPassword) {
+      setError("Please enter email, invite code, password, and confirm password.");
       return;
     }
     if (password !== confirmPassword) {
@@ -191,6 +193,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim(),
+          inviteCode: inviteCode.trim(),
           password,
           confirmPassword,
         }),
@@ -301,6 +304,24 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               value={email}
             />
           </Field>
+
+          {mode === "register" && (
+            <Field>
+              <FieldLabel htmlFor="invite-code">Invite Code</FieldLabel>
+              <Input
+                id="invite-code"
+                autoComplete="off"
+                disabled={isBusy}
+                onChange={(event) => setInviteCode(event.target.value)}
+                placeholder="LGTX-XXXX-XXXX"
+                type="text"
+                value={inviteCode}
+              />
+              <FieldDescription>
+                Registration is invitation-only right now.
+              </FieldDescription>
+            </Field>
+          )}
 
           {(mode === "password" || mode === "register") && (
             <Field>

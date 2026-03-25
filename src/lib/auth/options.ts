@@ -6,6 +6,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 
+import { getUserRoleById } from "@/lib/auth/admin";
 import { consumeLoginCode } from "@/lib/auth/otp";
 import { prisma } from "@/lib/prisma";
 
@@ -85,24 +86,18 @@ const providers: NextAuthOptions["providers"] = [
         where: { email: normalizedEmail },
       });
 
-      const user =
-        existingUser ??
-        (await prisma.user.create({
-          data: {
-            email: normalizedEmail,
-            emailVerified: new Date(),
-            name: normalizedEmail.split("@")[0],
-          },
-        }));
+      if (!existingUser) {
+        return null;
+      }
 
-      if (!user.emailVerified) {
+      if (!existingUser.emailVerified) {
         await prisma.user.update({
-          where: { id: user.id },
+          where: { id: existingUser.id },
           data: { emailVerified: new Date() },
         });
       }
 
-      return toSafeUser(user);
+      return toSafeUser(existingUser);
     },
   }),
 ];
@@ -141,6 +136,10 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+        session.user.role = await getUserRoleById(
+          token.sub,
+          session.user.email,
+        );
       }
 
       return session;

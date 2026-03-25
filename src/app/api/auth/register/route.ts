@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
+import { normalizeInviteCode } from "@/features/invite-codes/service";
 import { prisma } from "@/lib/prisma";
 
 function isValidEmail(email: string) {
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
     | {
         name?: unknown;
         email?: unknown;
+        inviteCode?: unknown;
         password?: unknown;
         confirmPassword?: unknown;
       }
@@ -20,6 +22,7 @@ export async function POST(request: Request) {
   if (
     !body ||
     typeof body.email !== "string" ||
+    typeof body.inviteCode !== "string" ||
     typeof body.password !== "string" ||
     typeof body.confirmPassword !== "string"
   ) {
@@ -27,12 +30,17 @@ export async function POST(request: Request) {
   }
 
   const email = body.email.trim().toLowerCase();
+  const inviteCode = normalizeInviteCode(body.inviteCode);
   const password = body.password.trim();
   const confirmPassword = body.confirmPassword.trim();
   const name = typeof body.name === "string" ? body.name.trim() : "";
 
   if (!isValidEmail(email)) {
     return NextResponse.json({ message: "邮箱格式不正确。" }, { status: 400 });
+  }
+
+  if (!inviteCode) {
+    return NextResponse.json({ message: "请输入邀请码。" }, { status: 400 });
   }
 
   if (password.length < 8) {
@@ -46,32 +54,67 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "两次密码输入不一致。" }, { status: 400 });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
   const passwordHash = await bcrypt.hash(password, 12);
 
-  if (existing) {
-    if (existing.passwordHash) {
-      return NextResponse.json({ message: "该邮箱已注册。" }, { status: 409 });
-    }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const invite = await tx.inviteCode.findUnique({
+        where: { normalizedCode: inviteCode },
+      });
 
-    await prisma.user.update({
-      where: { id: existing.id },
-      data: {
-        name: name || existing.name,
-        passwordHash,
-      },
+      if (!invite) {
+        throw new Error("邀请码不存在。");
+      }
+
+      if (invite.usedAt) {
+        throw new Error("邀请码已被使用。");
+      }
+
+      const existing = await tx.user.findUnique({ where: { email } });
+
+      if (existing?.passwordHash) {
+        throw new Error("该邮箱已注册。");
+      }
+
+      if (existing) {
+        await tx.user.update({
+          where: { id: existing.id },
+          data: {
+            name: name || existing.name,
+            passwordHash,
+          },
+        });
+      } else {
+        await tx.user.create({
+          data: {
+            email,
+            name: name || email.split("@")[0],
+            passwordHash,
+          },
+        });
+      }
+
+      await tx.inviteCode.update({
+        where: { id: invite.id },
+        data: {
+          usedAt: new Date(),
+          usedByEmail: email,
+        },
+      });
+
+      return {
+        activated: Boolean(existing),
+      };
     });
 
-    return NextResponse.json({ message: "账号已激活，可直接登录。" });
+    return NextResponse.json(
+      { message: result.activated ? "账号已激活，可直接登录。" : "注册成功。" },
+      { status: result.activated ? 200 : 201 },
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "注册失败，请稍后再试。";
+
+    return NextResponse.json({ message }, { status: 400 });
   }
-
-  await prisma.user.create({
-    data: {
-      email,
-      name: name || email.split("@")[0],
-      passwordHash,
-    },
-  });
-
-  return NextResponse.json({ message: "注册成功。" }, { status: 201 });
 }
