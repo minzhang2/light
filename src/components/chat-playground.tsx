@@ -480,7 +480,7 @@ export function ChatPlayground({
         </div>
       </div>
 
-      <div className="shrink-0 px-4 pb-6 pt-4 md:px-8 md:pb-8 md:pt-4">
+      <div className="shrink-0 px-3 pb-4 pt-3 md:px-8 md:pb-8 md:pt-4">
         <div className="mx-auto max-w-5xl">
           <div className="rounded-2xl border border-border/60 bg-background shadow-sm transition-colors focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/15">
             <Textarea
@@ -515,8 +515,8 @@ export function ChatPlayground({
                     id="chat-key"
                     className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[popup-open=true]:border-transparent data-[popup-open=true]:ring-0"
                   >
-                    <span className="max-w-40 truncate">
-                      {selectedKey ? `${selectedKey.name} · ${selectedKey.group}` : "选择 Key"}
+                    <span className="max-w-24 truncate md:max-w-40">
+                      {selectedKey ? <><span>{selectedKey.name}</span><span className="hidden md:inline"> · {selectedKey.group}</span></> : "选择 Key"}
                     </span>
                   </SelectTrigger>
                   <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[calc(100vw-2rem)]">
@@ -542,7 +542,7 @@ export function ChatPlayground({
                     id="chat-model"
                     className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[popup-open=true]:border-transparent data-[popup-open=true]:ring-0"
                   >
-                    <span className="max-w-48 truncate">{selectedModel || "选择模型"}</span>
+                    <span className="max-w-24 truncate md:max-w-48">{selectedModel || "选择模型"}</span>
                   </SelectTrigger>
                   <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[calc(100vw-2rem)]">
                     {(selectedKey?.models ?? []).map((item) => (
