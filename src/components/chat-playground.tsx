@@ -142,15 +142,16 @@ export function ChatPlayground({
       if (!response.ok || !payload?.result) {
         throw new Error(payload?.message ?? "聊天请求失败。");
       }
+      const result = payload.result;
 
       setMessages((current) => [
         ...current,
         {
           id: makeMessageId(),
           role: "assistant",
-          content: payload.result.content,
-          keyName: payload.result.keyName,
-          model: payload.result.model,
+          content: result.content,
+          keyName: result.keyName,
+          model: result.model,
         },
       ]);
     } catch (error) {
@@ -223,7 +224,10 @@ export function ChatPlayground({
             <Field>
               <FieldLabel htmlFor="chat-model">模型</FieldLabel>
               <FieldContent>
-                <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
+                <Select
+                  value={selectedModel || undefined}
+                  onValueChange={(value) => setSelectedModel(value ?? "")}
+                >
                   <SelectTrigger id="chat-model">
                     <SelectValue />
                   </SelectTrigger>
