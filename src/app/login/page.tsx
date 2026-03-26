@@ -7,6 +7,7 @@ import {
   authOptions,
   getEnabledSocialProviders,
 } from "@/lib/auth/options";
+import { isInviteCodeRequiredForRegistration } from "@/lib/auth/registration";
 
 export const metadata: Metadata = {
   title: "登录",
@@ -20,11 +21,15 @@ export default async function LoginPage() {
   }
 
   const socialProviders = getEnabledSocialProviders();
+  const requireInviteCode = isInviteCodeRequiredForRegistration();
 
   return (
     <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
       <div className="w-full max-w-sm">
-        <LoginForm socialProviders={socialProviders} />
+        <LoginForm
+          socialProviders={socialProviders}
+          requireInviteCode={requireInviteCode}
+        />
       </div>
     </div>
   );

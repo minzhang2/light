@@ -5,6 +5,7 @@ import { BriefcaseBusiness } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
+import { PasswordVerificationForm } from "@/components/auth/password-verification-form";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -17,16 +18,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-type Mode = "password" | "email-code" | "register";
+type Mode = "password" | "email-code" | "register" | "reset-password";
 
 type LoginFormProps = {
   socialProviders: {
     google: boolean;
     apple: boolean;
   };
+  requireInviteCode: boolean;
 };
 
-export function LoginForm({ socialProviders }: LoginFormProps) {
+export function LoginForm({ socialProviders, requireInviteCode }: LoginFormProps) {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("password");
@@ -66,6 +68,9 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
       setConfirmPassword("");
       setInviteCode("");
     }
+    if (nextMode !== "reset-password") {
+      setPassword("");
+    }
   }
 
   async function signInByCredentials(
@@ -79,7 +84,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     });
 
     if (!result || result.error) {
-      throw new Error("Login failed. Please check your input.");
+      throw new Error("登录失败，请检查输入内容。");
     }
 
     router.push(result.url ?? "/dashboard");
@@ -88,7 +93,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
 
   async function requestCode() {
     if (!canSendCode) {
-      setError("Please enter a valid email first.");
+      setError("请先输入有效邮箱。");
       return false;
     }
 
@@ -107,16 +112,16 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
         | null;
 
       if (!response.ok) {
-        setError(data?.message ?? "Failed to send code.");
+        setError(data?.message ?? "发送验证码失败。");
         return false;
       }
 
       setCodeRequested(true);
-      const suffix = data?.devCode ? ` Dev code: ${data.devCode}` : "";
-      setMessage(`${data?.message ?? "Verification code sent."}${suffix}`);
+      const suffix = data?.devCode ? ` 开发验证码：${data.devCode}` : "";
+      setMessage(`${data?.message ?? "验证码已发送。"}${suffix}`);
       return true;
     } catch {
-      setError("Failed to send code. Please try again.");
+      setError("发送验证码失败，请稍后重试。");
       return false;
     } finally {
       setSendingCode(false);
@@ -133,7 +138,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     }
 
     if (!email || !code) {
-      setError("Please enter your email and code.");
+      setError("请输入邮箱和验证码。");
       return;
     }
 
@@ -144,7 +149,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
         code: code.trim(),
       });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Login failed.");
+      setError(loginError instanceof Error ? loginError.message : "登录失败。");
       setLoading(false);
     }
   }
@@ -154,7 +159,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     clearNotice();
 
     if (!email || !password) {
-      setError("Please enter your email and password.");
+      setError("请输入邮箱和密码。");
       return;
     }
 
@@ -165,7 +170,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
         password,
       });
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : "Login failed.");
+      setError(loginError instanceof Error ? loginError.message : "登录失败。");
       setLoading(false);
     }
   }
@@ -174,12 +179,21 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     event.preventDefault();
     clearNotice();
 
-    if (!email || !inviteCode || !password || !confirmPassword) {
-      setError("Please enter email, invite code, password, and confirm password.");
+    if (!email || !password || !confirmPassword) {
+      setError(
+        requireInviteCode
+          ? "请输入邮箱、邀请码、密码和确认密码。"
+          : "请输入邮箱、密码和确认密码。",
+      );
+      return;
+    }
+
+    if (requireInviteCode && !inviteCode) {
+      setError("请输入邀请码。");
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("两次密码输入不一致。");
       return;
     }
 
@@ -204,18 +218,18 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
         | null;
 
       if (!response.ok) {
-        setError(data?.message ?? "Sign up failed.");
+        setError(data?.message ?? "注册失败。");
         setLoading(false);
         return;
       }
 
-      setMessage(data?.message ?? "Account created, logging in...");
+      setMessage(data?.message ?? "账号创建成功，正在登录...");
       await signInByCredentials("password", {
         email: email.trim(),
         password,
       });
     } catch {
-      setError("Sign up failed. Please try again.");
+      setError("注册失败，请稍后重试。");
       setLoading(false);
     }
   }
@@ -226,8 +240,8 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     if (!socialProviders[provider]) {
       setError(
         provider === "google"
-          ? "Google login is not configured yet."
-          : "Apple login is not configured yet.",
+          ? "Google 登录暂未配置。"
+          : "Apple 登录暂未配置。",
       );
       return;
     }
@@ -236,9 +250,55 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
     try {
       await signIn(provider, { callbackUrl: "/dashboard" });
     } catch {
-      setError("Failed to start social login.");
+      setError("发起第三方登录失败。");
       setLoading(false);
     }
+  }
+
+  if (mode === "reset-password") {
+    return (
+      <div className={cn("flex flex-col gap-6")}>
+        <div className="flex flex-col items-center gap-2 text-center">
+          <a
+            href="#"
+            className="flex flex-col items-center gap-2 font-medium"
+          >
+            <div className="flex size-8 items-center justify-center rounded-md">
+              <BriefcaseBusiness className="size-6" />
+            </div>
+            <span className="sr-only">Light Inc.</span>
+          </a>
+          <h1 className="text-xl font-bold">重置密码</h1>
+          <FieldDescription>
+            想起来了？{" "}
+            <button
+              className="underline underline-offset-4 hover:text-primary"
+              disabled={loading || sendingCode}
+              onClick={() => switchMode("password")}
+              type="button"
+            >
+              返回登录
+            </button>
+          </FieldDescription>
+        </div>
+
+        <PasswordVerificationForm
+          initialEmail={email}
+          sendCodePath="/api/auth/password/send-code"
+          submitPath="/api/auth/password/reset"
+          requestButtonLabel="发送重置验证码"
+          submitButtonLabel="更新密码"
+          idleHint="输入邮箱后发送验证码，验证通过后即可设置新密码。"
+          successHint="密码已更新，请返回登录并使用新密码。"
+          onSuccess={({ email: nextEmail }) => {
+            setEmail(nextEmail);
+            setMode("password");
+            setMessage("密码已更新，请使用新密码登录。");
+            setError(null);
+          }}
+        />
+      </div>
+    );
   }
 
   return (
@@ -263,29 +323,29 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
               </div>
               <span className="sr-only">Light Inc.</span>
             </a>
-            <h1 className="text-xl font-bold">Welcome to Light Inc.</h1>
+            <h1 className="text-xl font-bold">欢迎来到 Light Inc.</h1>
             <FieldDescription>
-              {mode === "register" ? "Already have an account? " : "Don't have an account? "}
+              {mode === "register" ? "已有账号？" : "还没有账号？"}
               <button
                 className="underline underline-offset-4 hover:text-primary"
                 disabled={isBusy}
                 onClick={() => switchMode(mode === "register" ? "password" : "register")}
                 type="button"
               >
-                {mode === "register" ? "Log in" : "Sign up"}
+                {mode === "register" ? "登录" : "注册"}
               </button>
             </FieldDescription>
           </div>
 
           {mode === "register" && (
             <Field>
-              <FieldLabel htmlFor="name">Name</FieldLabel>
+              <FieldLabel htmlFor="name">姓名</FieldLabel>
               <Input
                 id="name"
                 autoComplete="name"
                 disabled={isBusy}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Your name"
+                placeholder="请输入姓名"
                 type="text"
                 value={name}
               />
@@ -293,7 +353,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
           )}
 
           <Field>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <FieldLabel htmlFor="email">邮箱</FieldLabel>
             <Input
               id="email"
               autoComplete="email"
@@ -305,9 +365,9 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
             />
           </Field>
 
-          {mode === "register" && (
+          {mode === "register" && requireInviteCode && (
             <Field>
-              <FieldLabel htmlFor="invite-code">Invite Code</FieldLabel>
+              <FieldLabel htmlFor="invite-code">邀请码</FieldLabel>
               <Input
                 id="invite-code"
                 autoComplete="off"
@@ -318,35 +378,47 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
                 value={inviteCode}
               />
               <FieldDescription>
-                Registration is invitation-only right now.
+                当前仅支持邀请码注册。
               </FieldDescription>
             </Field>
           )}
 
           {(mode === "password" || mode === "register") && (
             <Field>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <FieldLabel htmlFor="password">密码</FieldLabel>
               <Input
                 id="password"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
                 disabled={isBusy}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="至少 8 位"
                 type="password"
                 value={password}
               />
+              {mode === "password" ? (
+                <FieldDescription>
+                  <button
+                    className="underline underline-offset-4 hover:text-primary"
+                    disabled={isBusy}
+                    onClick={() => switchMode("reset-password")}
+                    type="button"
+                  >
+                    忘记密码？通过邮箱验证码重置
+                  </button>
+                </FieldDescription>
+              ) : null}
             </Field>
           )}
 
           {mode === "register" && (
             <Field>
-              <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
+              <FieldLabel htmlFor="confirm-password">确认密码</FieldLabel>
               <Input
                 id="confirm-password"
                 autoComplete="new-password"
                 disabled={isBusy}
                 onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Re-enter your password"
+                placeholder="请再次输入密码"
                 type="password"
                 value={confirmPassword}
               />
@@ -355,12 +427,12 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
 
           {mode === "email-code" && codeRequested && (
             <Field>
-              <FieldLabel htmlFor="code">Verification Code</FieldLabel>
+              <FieldLabel htmlFor="code">验证码</FieldLabel>
               <Input
                 id="code"
                 disabled={isBusy}
                 onChange={(event) => setCode(event.target.value)}
-                placeholder="6-digit code"
+                placeholder="6 位验证码"
                 type="text"
                 value={code}
               />
@@ -381,19 +453,19 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
             <Button type="submit" size="lg" disabled={isBusy}>
               {mode === "register"
                 ? loading
-                  ? "Creating..."
-                  : "Sign up"
+                  ? "注册中..."
+                  : "注册"
                 : mode === "password"
                   ? loading
-                    ? "Logging in..."
-                    : "Login"
+                    ? "登录中..."
+                    : "登录"
                   : codeRequested
                     ? loading
-                      ? "Verifying..."
-                      : "Verify & Login"
+                      ? "验证中..."
+                      : "验证并登录"
                     : sendingCode
-                      ? "Sending code..."
-                      : "Login"}
+                      ? "发送验证码中..."
+                      : "发送验证码"}
             </Button>
           </Field>
 
@@ -406,7 +478,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
                   onClick={() => switchMode("password")}
                   type="button"
                 >
-                  Use password login
+                  使用密码登录
                 </button>
               ) : (
                 <button
@@ -415,13 +487,13 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
                   onClick={() => switchMode("email-code")}
                   type="button"
                 >
-                  Use email verification code
+                  使用邮箱验证码登录
                 </button>
               )}
             </FieldDescription>
           </div>
 
-          <FieldSeparator>Or</FieldSeparator>
+          <FieldSeparator>或</FieldSeparator>
 
           <Field className="grid gap-4 sm:grid-cols-2">
             <Button
@@ -437,7 +509,7 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
                   fill="currentColor"
                 />
               </svg>
-              Continue with Apple
+              使用 Apple 继续
             </Button>
             <Button
               size="lg"
@@ -452,15 +524,15 @@ export function LoginForm({ socialProviders }: LoginFormProps) {
                   fill="currentColor"
                 />
               </svg>
-              Continue with Google
+              使用 Google 继续
             </Button>
           </Field>
         </FieldGroup>
       </form>
       <FieldDescription className="px-6 text-center">
-        By clicking continue, you agree to our{" "}
-        <a href="#">Terms of Service</a>{" "}
-        and <a href="#">Privacy Policy</a>.
+        点击继续即表示你同意我们的{" "}
+        <a href="#">《服务条款》</a>{" "}
+        和 <a href="#">《隐私政策》</a>。
       </FieldDescription>
     </div>
   );

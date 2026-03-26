@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { issueLoginCode, OtpRateLimitError } from "@/lib/auth/otp";
+import { getEmailOtpCopy, normalizeEmail } from "@/lib/auth/email-otp";
+import { OtpRateLimitError, issueEmailOtp } from "@/lib/auth/otp";
+import { prisma } from "@/lib/prisma";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -15,20 +17,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "邮箱格式不正确。" }, { status: 400 });
   }
 
-  const email = body.email.trim().toLowerCase();
+  const email = normalizeEmail(body.email);
   if (!isValidEmail(email)) {
     return NextResponse.json({ message: "邮箱格式不正确。" }, { status: 400 });
   }
 
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  if (!existingUser) {
+    return NextResponse.json({ message: "该邮箱未注册。" }, { status: 404 });
+  }
+
   try {
-    const result = await issueLoginCode(email);
+    const result = await issueEmailOtp(email, "password-reset");
+    const copy = getEmailOtpCopy("password-reset");
 
     return NextResponse.json({
-      message: result.reused
-        ? "验证码仍在有效期内，请直接使用。"
-        : result.delivery === "smtp"
-          ? "验证码已发送，请检查邮箱。"
-          : "SMTP 未配置，验证码已输出到服务端日志。",
+      message:
+        result.delivery === "smtp" ? copy.successMessage : copy.fallbackMessage,
       ...(process.env.NODE_ENV !== "production" && result.previewCode
         ? { devCode: result.previewCode }
         : {}),
@@ -38,7 +47,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: error.message }, { status: 429 });
     }
 
-    console.error("[auth] failed to send login code", error);
+    console.error("[auth] failed to send password reset code", error);
     return NextResponse.json(
       { message: "发送验证码失败，请稍后重试。" },
       { status: 500 },

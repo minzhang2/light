@@ -45,17 +45,19 @@ export function SignOutButton({
   );
 }
 
-export function SignOutDropdownMenuItem() {
-  const [open, setOpen] = useState(false);
-
+export function SignOutDropdownMenuItem({
+  onClick,
+}: {
+  onClick: () => void;
+}) {
   return (
-    <>
-      <DropdownMenuItem onClick={() => setOpen(true)} variant="destructive">
-        <LogOutIcon />
-        退出登录
-      </DropdownMenuItem>
-      <SignOutConfirmDialog open={open} onOpenChange={setOpen} />
-    </>
+    <DropdownMenuItem
+      onClick={onClick}
+      variant="destructive"
+    >
+      <LogOutIcon />
+      退出登录
+    </DropdownMenuItem>
   );
 }
 
@@ -82,7 +84,7 @@ export function SignOutSidebarMenuItem() {
   );
 }
 
-function SignOutConfirmDialog({
+export function SignOutConfirmDialog({
   open,
   onOpenChange,
 }: {

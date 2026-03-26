@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   Avatar,
@@ -26,10 +27,12 @@ import {
   ChevronsUpDownIcon,
   BellIcon,
   BadgePlusIcon,
+  KeyRoundIcon,
   ShieldCheckIcon,
   UserRoundIcon,
 } from "lucide-react"
 import {
+  SignOutConfirmDialog,
   SignOutDropdownMenuItem,
   SignOutSidebarMenuItem,
 } from "@/components/auth/sign-out-button"
@@ -47,6 +50,7 @@ export function NavUser({
 }) {
   const router = useRouter()
   const { isMobile } = useSidebar()
+  const [signOutOpen, setSignOutOpen] = useState(false)
   const avatarFallback = user.name.slice(0, 1).toUpperCase()
 
   return (
@@ -92,7 +96,11 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => router.push("/dashboard/account")}>
                 <UserRoundIcon />
-                账户中心
+                个人中心
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/dashboard/account/password")}>
+                <KeyRoundIcon />
+                修改密码
               </DropdownMenuItem>
               {user.canAccessAdminConsole ? (
                 <DropdownMenuItem onClick={() => router.push("/dashboard/admin")}>
@@ -114,10 +122,16 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <SignOutDropdownMenuItem />
+              <SignOutDropdownMenuItem
+                onClick={() => setSignOutOpen(true)}
+              />
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+        <SignOutConfirmDialog
+          open={signOutOpen}
+          onOpenChange={setSignOutOpen}
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   )
@@ -156,7 +170,13 @@ export function NavUserPanel({
         <SidebarMenuItem>
           <SidebarMenuButton onClick={() => router.push("/dashboard/account")} size="lg">
             <UserRoundIcon />
-            <span>账户中心</span>
+            <span>个人中心</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton onClick={() => router.push("/dashboard/account/password")} size="lg">
+            <KeyRoundIcon />
+            <span>修改密码</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         {user.canAccessAdminConsole ? (

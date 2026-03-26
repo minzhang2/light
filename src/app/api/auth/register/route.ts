@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
 import { normalizeInviteCode } from "@/features/invite-codes/service";
+import { isInviteCodeRequiredForRegistration } from "@/lib/auth/registration";
 import { prisma } from "@/lib/prisma";
 
 function isValidEmail(email: string) {
@@ -9,6 +10,7 @@ function isValidEmail(email: string) {
 }
 
 export async function POST(request: Request) {
+  const requireInviteCode = isInviteCodeRequiredForRegistration();
   const body = (await request.json().catch(() => null)) as
     | {
         name?: unknown;
@@ -22,15 +24,16 @@ export async function POST(request: Request) {
   if (
     !body ||
     typeof body.email !== "string" ||
-    typeof body.inviteCode !== "string" ||
     typeof body.password !== "string" ||
-    typeof body.confirmPassword !== "string"
+    typeof body.confirmPassword !== "string" ||
+    (body.inviteCode !== undefined && typeof body.inviteCode !== "string")
   ) {
     return NextResponse.json({ message: "参数不完整。" }, { status: 400 });
   }
 
   const email = body.email.trim().toLowerCase();
-  const inviteCode = normalizeInviteCode(body.inviteCode);
+  const inviteCode =
+    typeof body.inviteCode === "string" ? normalizeInviteCode(body.inviteCode) : "";
   const password = body.password.trim();
   const confirmPassword = body.confirmPassword.trim();
   const name = typeof body.name === "string" ? body.name.trim() : "";
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "邮箱格式不正确。" }, { status: 400 });
   }
 
-  if (!inviteCode) {
+  if (requireInviteCode && !inviteCode) {
     return NextResponse.json({ message: "请输入邀请码。" }, { status: 400 });
   }
 
@@ -58,16 +61,21 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const invite = await tx.inviteCode.findUnique({
-        where: { normalizedCode: inviteCode },
-      });
+      let inviteId: string | null = null;
+      if (requireInviteCode) {
+        const invite = await tx.inviteCode.findUnique({
+          where: { normalizedCode: inviteCode },
+        });
 
-      if (!invite) {
-        throw new Error("邀请码不存在。");
-      }
+        if (!invite) {
+          throw new Error("邀请码不存在。");
+        }
 
-      if (invite.usedAt) {
-        throw new Error("邀请码已被使用。");
+        if (invite.usedAt) {
+          throw new Error("邀请码已被使用。");
+        }
+
+        inviteId = invite.id;
       }
 
       const existing = await tx.user.findUnique({ where: { email } });
@@ -94,13 +102,15 @@ export async function POST(request: Request) {
         });
       }
 
-      await tx.inviteCode.update({
-        where: { id: invite.id },
-        data: {
-          usedAt: new Date(),
-          usedByEmail: email,
-        },
-      });
+      if (inviteId) {
+        await tx.inviteCode.update({
+          where: { id: inviteId },
+          data: {
+            usedAt: new Date(),
+            usedByEmail: email,
+          },
+        });
+      }
 
       return {
         activated: Boolean(existing),

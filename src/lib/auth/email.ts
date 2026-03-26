@@ -1,5 +1,10 @@
 import nodemailer from "nodemailer";
 
+import {
+  getEmailOtpCopy,
+  type EmailOtpPurpose,
+} from "@/lib/auth/email-otp";
+
 export type MailDeliveryResult = {
   delivery: "smtp" | "log";
   previewCode?: string;
@@ -28,11 +33,13 @@ function readSmtpConfig() {
 export async function sendLoginCodeEmail(
   email: string,
   code: string,
+  purpose: EmailOtpPurpose = "login",
 ): Promise<MailDeliveryResult> {
   const smtp = readSmtpConfig();
+  const mailCopy = getEmailOtpCopy(purpose);
 
   if (!smtp) {
-    console.info(`[auth] login code for ${email}: ${code}`);
+    console.info(`[auth] ${mailCopy.actionLabel}验证码（${email}）：${code}`);
     return {
       delivery: "log",
       previewCode: code,
@@ -49,9 +56,9 @@ export async function sendLoginCodeEmail(
   await transporter.sendMail({
     from: smtp.from,
     to: email,
-    subject: "Your login verification code",
-    text: `Your verification code is ${code}. It will expire in 10 minutes.`,
-    html: `<p>Your verification code is <strong>${code}</strong>.</p><p>It will expire in 10 minutes.</p>`,
+    subject: mailCopy.subject,
+    text: `你的验证码是 ${code}。${mailCopy.text}`,
+    html: `<p>你的验证码是 <strong>${code}</strong>。</p><p>${mailCopy.text}</p>`,
   });
 
   return {

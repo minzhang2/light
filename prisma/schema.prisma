@@ -62,11 +62,12 @@ model VerificationToken {
 model EmailOtp {
   id        String   @id @default(cuid())
   email     String
+  purpose   String   @default("login")
   codeHash  String
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  @@index([email, createdAt])
+  @@index([email, purpose, createdAt])
 }
 
 model InviteCode {

@@ -3,8 +3,12 @@ import { randomInt } from "node:crypto";
 
 import { prisma } from "@/lib/prisma";
 import { sendLoginCodeEmail } from "@/lib/auth/email";
+import {
+  normalizeEmail,
+  type EmailOtpPurpose,
+} from "@/lib/auth/email-otp";
 
-const CODE_EXPIRES_MS = 10 * 60 * 1000;
+const CODE_EXPIRES_MS = 30 * 60 * 1000;
 const SEND_INTERVAL_MS = 60 * 1000;
 
 export class OtpRateLimitError extends Error {
@@ -13,18 +17,30 @@ export class OtpRateLimitError extends Error {
   }
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
-
-export async function issueLoginCode(email: string) {
+export async function issueEmailOtp(
+  email: string,
+  purpose: EmailOtpPurpose,
+) {
   const normalizedEmail = normalizeEmail(email);
   const latestCode = await prisma.emailOtp.findFirst({
-    where: { email: normalizedEmail },
+    where: { email: normalizedEmail, purpose },
     orderBy: { createdAt: "desc" },
   });
 
   const now = Date.now();
+  const shouldReuseActiveCode = purpose === "login";
+  if (
+    shouldReuseActiveCode &&
+    latestCode &&
+    latestCode.expiresAt.getTime() > now
+  ) {
+    return {
+      expiresAt: latestCode.expiresAt,
+      delivery: "log" as const,
+      reused: true,
+    };
+  }
+
   if (latestCode && now - latestCode.createdAt.getTime() < SEND_INTERVAL_MS) {
     throw new OtpRateLimitError();
   }
@@ -33,29 +49,37 @@ export async function issueLoginCode(email: string) {
   const codeHash = await bcrypt.hash(code, 10);
   const expiresAt = new Date(now + CODE_EXPIRES_MS);
 
-  await prisma.emailOtp.deleteMany({ where: { email: normalizedEmail } });
+  await prisma.emailOtp.deleteMany({
+    where: { email: normalizedEmail, purpose },
+  });
   await prisma.emailOtp.create({
     data: {
       email: normalizedEmail,
+      purpose,
       codeHash,
       expiresAt,
     },
   });
 
-  const delivery = await sendLoginCodeEmail(normalizedEmail, code);
+  const delivery = await sendLoginCodeEmail(normalizedEmail, code, purpose);
 
   return {
     expiresAt,
     ...delivery,
+    reused: false,
   };
 }
 
-export async function consumeLoginCode(email: string, code: string) {
+export async function consumeEmailOtp(
+  email: string,
+  code: string,
+  purpose: EmailOtpPurpose,
+) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedCode = code.trim();
 
   const latestCode = await prisma.emailOtp.findFirst({
-    where: { email: normalizedEmail },
+    where: { email: normalizedEmail, purpose },
     orderBy: { createdAt: "desc" },
   });
 
@@ -64,7 +88,9 @@ export async function consumeLoginCode(email: string, code: string) {
   }
 
   if (latestCode.expiresAt.getTime() < Date.now()) {
-    await prisma.emailOtp.deleteMany({ where: { email: normalizedEmail } });
+    await prisma.emailOtp.deleteMany({
+      where: { email: normalizedEmail, purpose },
+    });
     return false;
   }
 
@@ -73,6 +99,16 @@ export async function consumeLoginCode(email: string, code: string) {
     return false;
   }
 
-  await prisma.emailOtp.deleteMany({ where: { email: normalizedEmail } });
+  await prisma.emailOtp.deleteMany({
+    where: { email: normalizedEmail, purpose },
+  });
   return true;
+}
+
+export function issueLoginCode(email: string) {
+  return issueEmailOtp(email, "login");
+}
+
+export function consumeLoginCode(email: string, code: string) {
+  return consumeEmailOtp(email, code, "login");
 }

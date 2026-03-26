@@ -13,7 +13,7 @@ import { requireSession } from "@/lib/auth/require-session";
 
 export const metadata: Metadata = {
   title: "Account",
-  description: "账户中心",
+  description: "个人中心",
 };
 
 function formatDate(value: Date | null | undefined) {
@@ -69,7 +69,7 @@ export default async function DashboardAccountPage() {
 
   return (
     <>
-      <DashboardPageHeader title="账户中心" />
+      <DashboardPageHeader title="个人中心" />
 
       <div className="flex flex-1 flex-col gap-5 p-4 md:p-6">
         {/* Profile */}
@@ -172,6 +172,7 @@ export default async function DashboardAccountPage() {
             </dl>
           </div>
         </section>
+
       </div>
     </>
   );

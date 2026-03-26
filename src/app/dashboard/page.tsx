@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { KeyRoundIcon, ShieldIcon, TicketIcon } from "lucide-react";
+import { KeyRoundIcon, MessageCircleIcon, ShieldIcon, TicketIcon } from "lucide-react";
 
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,12 @@ async function DashboardPageContent({
 
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <QuickLink
+            href="/dashboard/chat"
+            icon={<MessageCircleIcon className="h-5 w-5" />}
+            title="聊天"
+            description="直接使用已验证的 key 和模型发起多轮对话。"
+          />
           <QuickLink
             href="/dashboard/keys"
             icon={<KeyRoundIcon className="h-5 w-5" />}

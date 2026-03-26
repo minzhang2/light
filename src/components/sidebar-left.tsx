@@ -17,6 +17,7 @@ import {
   KeyRoundIcon,
   LifeBuoyIcon,
   MailIcon,
+  MessageCircleIcon,
   RefreshCcwIcon,
   TerminalIcon,
 } from "lucide-react"
@@ -74,6 +75,15 @@ export function SidebarLeft({
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const navMain = [
+    {
+      title: "聊天",
+      url: "/dashboard/chat",
+      icon: (
+        <MessageCircleIcon
+        />
+      ),
+      isActive: pathname.startsWith("/dashboard/chat"),
+    },
     {
       title: "Key 管理",
       url: "/dashboard/keys",
