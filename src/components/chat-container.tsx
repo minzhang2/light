@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { MenuIcon } from "lucide-react";
 
 import { ChatHistoryList } from "@/components/chat-history-list";
 import { ChatPlayground } from "@/components/chat-playground";
@@ -21,6 +22,7 @@ export function ChatContainer({
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState(initialSessionId);
   const [activeSession, setActiveSession] = useState(initialSession);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const activeSessionIdRef = useRef<string | null>(initialSessionId);
   const requestControllerRef = useRef<AbortController | null>(null);
 
@@ -90,6 +92,7 @@ export function ChatContainer({
   }
 
   function handleSessionChange(id: string) {
+    setSidebarOpen(false);
     if (id === "new") {
       requestControllerRef.current?.abort();
       requestControllerRef.current = null;
@@ -145,7 +148,37 @@ export function ChatContainer({
           refreshKey={historyRefreshKey}
         />
       </aside>
+
+      {/* Mobile sidebar drawer */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 h-full w-72 bg-background shadow-xl flex flex-col overflow-hidden">
+            <ChatHistoryList
+              activeSessionId={activeSessionId}
+              onNewChat={() => handleSessionChange("new")}
+              onSessionSelect={handleSessionChange}
+              refreshKey={historyRefreshKey}
+            />
+          </aside>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* Mobile top bar */}
+        <div className="flex items-center border-b border-border/70 px-4 py-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label="打开历史记录"
+          >
+            <MenuIcon className="h-5 w-5" />
+          </button>
+        </div>
         <ChatPlayground
           keys={keys}
           initialSession={activeSession}

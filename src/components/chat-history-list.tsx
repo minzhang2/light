@@ -134,7 +134,7 @@ export function ChatHistoryList({
                       void handleDelete(s.id, e as unknown as React.MouseEvent);
                     }
                   }}
-                  className="hidden shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive group-hover:flex"
+                  className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:hidden md:group-hover:flex"
                 >
                   <Trash2Icon className="h-3.5 w-3.5" />
                 </span>
