@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ const TOKENS = [
   },
 ];
 
-const API_BASE = "https://zjkdongao.cn/mail-api/v1";
+const API_BASE = "/api/mail";
 
 interface Mailbox {
   id: number;
@@ -58,8 +58,6 @@ function now() {
 
 export default function MailPage() {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
-  const [selectedMailbox, setSelectedMailbox] = useState<Mailbox | null>(null);
-  const [emails, setEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(false);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [token, setToken] = useState(TOKENS[0].value);
@@ -72,6 +70,27 @@ export default function MailPage() {
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const logRef = useRef<HTMLDivElement>(null);
+
+  // 页面加载时从 DB 读取历史邮箱
+  useEffect(() => {
+    fetch("/api/mail/mailboxes")
+      .then((r) => r.json())
+      .then((json) => {
+        if (Array.isArray(json.mailboxes) && json.mailboxes.length > 0) {
+          const fromDb: Mailbox[] = json.mailboxes.map(
+            (m: { id: number; email: string; createdAt: string; remainingRequestsToday: number }) => ({
+              id: m.id,
+              email: m.email,
+              created_at: Math.floor(new Date(m.createdAt).getTime() / 1000),
+              remaining_requests_today: m.remainingRequestsToday,
+            }),
+          );
+          setMailboxes(fromDb);
+          setSpecificMailboxId(String(fromDb[0].id));
+        }
+      })
+      .catch(() => {/* 未登录或网络错误，静默忽略 */});
+  }, []);
 
   const addLog = useCallback((type: LogEntry["type"], message: string) => {
     setLogs((prev) => [...prev, { time: now(), type, message }]);
@@ -89,10 +108,26 @@ export default function MailPage() {
       const json = await res.json();
       if (json.code === 0 && json.data) {
         const mb: Mailbox = json.data;
-        setMailboxes((prev) => [mb, ...prev]);
-        setSelectedMailbox(mb);
+        setMailboxes((prev) => [mb, ...prev.filter((x) => x.id !== mb.id)]);
         setSpecificMailboxId(String(mb.id));
         addLog("success", `分配成功: ${mb.email} (ID: ${mb.id}), 今日剩余: ${mb.remaining_requests_today}`);
+        // 写入 DB（fire-and-forget）
+        fetch("/api/mail/mailboxes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: mb.id,
+            email: mb.email,
+            remaining_requests_today: mb.remaining_requests_today,
+          }),
+        })
+          .then(async (r) => {
+            if (!r.ok) {
+              const t = await r.text();
+              console.error("[mailbox] save to db failed:", r.status, t);
+            }
+          })
+          .catch((e) => console.error("[mailbox] save to db failed:", e));
       } else {
         addLog("error", `分配失败: ${json.message}`);
       }
@@ -104,12 +139,10 @@ export default function MailPage() {
   }
 
   async function fetchEmails(mailbox: Mailbox) {
-    setSelectedMailbox(mailbox);
     setEmailsLoading(true);
-    setEmails([]);
     addLog("info", `查询 ${mailbox.email} 的邮件…`);
     try {
-      const url = new URL(`${API_BASE}/unified-emails/user/emails`);
+      const url = new URL(`${API_BASE}/unified-emails/user/emails`, window.location.origin);
       url.searchParams.set("type", "system");
       url.searchParams.set("mailbox_id", String(mailbox.id));
       url.searchParams.set("page", "1");
@@ -119,15 +152,25 @@ export default function MailPage() {
       });
       const json = await res.json();
       if (json.code === 0 && json.data?.emails) {
-        setEmails(json.data.emails);
-        const codes = (json.data.emails as Email[])
-          .filter((e) => e.verification_code)
-          .map((e) => e.verification_code);
-        addLog(
-          "success",
-          `获取到 ${json.data.emails.length} 封邮件` +
-            (codes.length ? `，验证码: ${codes.join(", ")}` : ""),
-        );
+        const list = json.data.emails as Email[];
+        if (list.length === 0) {
+          addLog("info", `${mailbox.email}: 暂无邮件`);
+        } else {
+          const codes = list.filter((e) => e.verification_code).map((e) => e.verification_code);
+          addLog(
+            "success",
+            `${mailbox.email}: 获取到 ${list.length} 封邮件` +
+              (codes.length ? `，验证码: ${codes.join(", ")}` : ""),
+          );
+          for (const email of list) {
+            addLog(
+              "info",
+              `[${email.mailbox_email}] ${email.subject} | 来自: ${email.from_addr}${
+                email.verification_code ? ` | 验证码: ${email.verification_code}` : ""
+              }`,
+            );
+          }
+        }
       } else {
         addLog("error", `获取邮件失败: ${json.message}`);
       }
@@ -156,7 +199,7 @@ export default function MailPage() {
     setSpecificLoading(true);
     addLog("info", `查询邮箱 ID ${mbId} 的验证码…`);
     try {
-      const url = new URL(`${API_BASE}/unified-emails/user/emails`);
+      const url = new URL(`${API_BASE}/unified-emails/user/emails`, window.location.origin);
       url.searchParams.set("type", "system");
       url.searchParams.set("mailbox_id", mbId);
       url.searchParams.set("page", "1");
@@ -209,64 +252,57 @@ export default function MailPage() {
         title="临时邮箱"
         description="分配临时邮箱并获取验证码"
       />
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
-        {/* Token 切换 */}
-        <div className="flex items-center gap-3">
-          <label className="shrink-0 text-sm font-medium text-slate-700">
-            Bearer Token
-          </label>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              className="inline-flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
+      <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+        {/* 控制栏 */}
+        <div className="rounded-xl border border-border/70 bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm">
+                <span className="max-w-48 truncate text-slate-500">
+                  {TOKENS.find((t) => t.value === token)?.label ?? "自定义 Token"}
+                </span>
+                <ChevronDownIcon className="size-4 shrink-0 text-slate-400" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuRadioGroup
+                  value={token}
+                  onValueChange={(v) => setToken(v as string)}
+                >
+                  {TOKENS.map((t) => (
+                    <DropdownMenuRadioItem key={t.label} value={t.value}>
+                      {t.label}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={allocateMailbox} disabled={loading}>
+              {loading ? "分配中…" : "生成新邮箱"}
+            </Button>
+            <div className="h-6 w-px bg-slate-200" />
+            <Input
+              className="w-32 font-mono text-sm"
+              value={specificMailboxId}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setSpecificMailboxId(e.target.value)
+              }
+              placeholder="邮箱 ID"
+            />
+            <Button
+              variant="outline"
+              onClick={fetchSpecificMailbox}
+              disabled={specificLoading || !specificMailboxId.trim()}
             >
-              <span className="truncate">
-                {TOKENS.find((t) => t.value === token)?.label ?? "自定义 Token"}
-              </span>
-              <ChevronDownIcon className="size-4 shrink-0 text-slate-400" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuRadioGroup
-                value={token}
-                onValueChange={(v) => setToken(v as string)}
-              >
-                {TOKENS.map((t) => (
-                  <DropdownMenuRadioItem key={t.label} value={t.value}>
-                    {t.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* 操作区 */}
-        <div className="flex items-center gap-3">
-          <Button onClick={allocateMailbox} disabled={loading}>
-            {loading ? "分配中…" : "生成新邮箱"}
-          </Button>
-          <div className="h-6 w-px bg-slate-200" />
-          <Input
-            className="w-28 font-mono text-sm"
-            value={specificMailboxId}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              setSpecificMailboxId(e.target.value)
-            }
-            placeholder="数字 ID"
-          />
-          <Button
-            variant="outline"
-            onClick={fetchSpecificMailbox}
-            disabled={specificLoading || !specificMailboxId.trim()}
-          >
-            {specificLoading ? "查询中…" : "收取验证码"}
-          </Button>
-          <Button
-            variant={polling ? "destructive" : "outline"}
-            onClick={togglePolling}
-            disabled={!specificMailboxId.trim()}
-          >
-            {polling ? "停止轮询" : "自动轮询"}
-          </Button>
+              {specificLoading ? "查询中…" : "收取验证码"}
+            </Button>
+            <Button
+              variant={polling ? "destructive" : "outline"}
+              onClick={togglePolling}
+              disabled={!specificMailboxId.trim()}
+            >
+              {polling ? "停止轮询" : "自动轮询"}
+            </Button>
+          </div>
         </div>
 
         {/* Mailbox list */}
@@ -279,100 +315,23 @@ export default function MailPage() {
               {mailboxes.map((mb) => (
                 <div
                   key={mb.id}
-                  className={`flex items-center justify-between px-4 py-3 ${
-                    selectedMailbox?.id === mb.id ? "bg-sky-50" : ""
-                  }`}
+                  className="flex items-center justify-between px-4 py-3"
                 >
-                  <div>
+                  <div className="flex items-center gap-3">
                     <span className="font-mono text-sm">{mb.email}</span>
-                    <span className="ml-3 text-xs text-slate-400">
-                      ID: {mb.id}
-                    </span>
-                    <span className="ml-3 text-xs text-slate-400">
-                      今日剩余: {mb.remaining_requests_today}
-                    </span>
+                    <span className="text-xs text-slate-400">ID: {mb.id}</span>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSpecificMailboxId(String(mb.id));
-                      }}
-                    >
-                      填入ID
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fetchEmails(mb)}
-                      disabled={emailsLoading && selectedMailbox?.id === mb.id}
-                    >
-                      {emailsLoading && selectedMailbox?.id === mb.id
-                        ? "查询中…"
-                        : "查询邮件"}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchEmails(mb)}
+                    disabled={emailsLoading}
+                  >
+                    {emailsLoading ? "查询中…" : "查询邮件"}
+                  </Button>
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Emails */}
-        {selectedMailbox && (
-          <div className="rounded-xl border border-border/70 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <span className="text-sm font-medium text-slate-700">
-                {selectedMailbox.email} 的邮件
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchEmails(selectedMailbox)}
-                disabled={emailsLoading}
-              >
-                刷新
-              </Button>
-            </div>
-            {emailsLoading ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">
-                加载中…
-              </div>
-            ) : emails.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">
-                暂无邮件，等待验证码后点击刷新
-              </div>
-            ) : (
-              <div className="divide-y">
-                {emails.map((em) => (
-                  <div key={em.id} className="px-4 py-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-800">
-                        {em.subject}
-                      </span>
-                      {em.verification_code && (
-                        <button
-                          className="rounded bg-sky-100 px-3 py-1 font-mono text-lg font-bold text-sky-700 transition hover:bg-sky-200"
-                          onClick={() => {
-                            navigator.clipboard.writeText(
-                              em.verification_code!,
-                            );
-                            addLog("info", `已复制验证码: ${em.verification_code}`);
-                          }}
-                          title="点击复制"
-                        >
-                          {em.verification_code}
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400">
-                      {em.from_addr}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 

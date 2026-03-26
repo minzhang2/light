@@ -15,10 +15,8 @@ import {
 import {
   AudioLinesIcon,
   KeyRoundIcon,
-  LifeBuoyIcon,
   MailIcon,
   MessageCircleIcon,
-  RefreshCcwIcon,
   TerminalIcon,
 } from "lucide-react"
 
@@ -50,24 +48,7 @@ const data = {
       plan: "Free",
     },
   ],
-  navSecondary: [
-    {
-      title: "刷新页面",
-      url: "/dashboard",
-      icon: (
-        <RefreshCcwIcon
-        />
-      ),
-    },
-    {
-      title: "帮助",
-      url: "/dashboard/keys",
-      icon: (
-        <LifeBuoyIcon
-        />
-      ),
-    },
-  ],
+  navSecondary: [] as { title: string; url: string; icon: React.ReactNode; badge?: React.ReactNode }[],
 }
 
 export function SidebarLeft({

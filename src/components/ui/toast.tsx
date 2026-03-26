@@ -25,7 +25,8 @@ type ToastItem = ToastInput & {
 };
 
 type ToastContextValue = {
-  toast: (input: ToastInput) => void;
+  toast: (input: ToastInput) => string;
+  dismiss: (id: string) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -65,9 +66,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     setToasts((current) => [...current, { id, duration, tone, ...input }]);
+    return id;
   }, []);
 
-  const value = useMemo(() => ({ toast }), [toast]);
+  const value = useMemo(() => ({ toast, dismiss: dismissToast }), [toast, dismissToast]);
 
   return (
     <ToastContext.Provider value={value}>
@@ -89,7 +91,8 @@ function ToastView({
   onDismiss: (id: string) => void;
 }) {
   useEffect(() => {
-    const timer = window.setTimeout(() => onDismiss(item.id), item.duration ?? 2400);
+    if (!item.duration) return;
+    const timer = window.setTimeout(() => onDismiss(item.id), item.duration);
 
     return () => window.clearTimeout(timer);
   }, [item.duration, item.id, onDismiss]);

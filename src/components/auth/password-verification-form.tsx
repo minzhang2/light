@@ -11,6 +11,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 type PasswordVerificationFormProps = {
   fixedEmail?: string;
@@ -188,13 +189,12 @@ export function PasswordVerificationForm({
 
             <Field>
               <FieldLabel htmlFor="new-password">新密码</FieldLabel>
-              <Input
+              <PasswordInput
                 id="new-password"
                 autoComplete="new-password"
                 disabled={isBusy}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="至少 8 位"
-                type="password"
                 value={password}
               />
             </Field>
@@ -203,13 +203,12 @@ export function PasswordVerificationForm({
               <FieldLabel htmlFor="confirm-new-password">
                 确认密码
               </FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirm-new-password"
                 autoComplete="new-password"
                 disabled={isBusy}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="请再次输入密码"
-                type="password"
                 value={confirmPassword}
               />
             </Field>

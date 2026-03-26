@@ -52,11 +52,6 @@ import type {
 
 type KeyFilter = "all" | "claude" | "codex";
 
-type Notice = {
-  tone: "success" | "error" | "info";
-  message: string;
-};
-
 type EditDraft = {
   name: string;
   secret: string;
@@ -134,18 +129,6 @@ function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function getToneClassName(tone: Notice["tone"]) {
-  if (tone === "success") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-
-  if (tone === "error") {
-    return "border-red-200 bg-red-50 text-red-700";
-  }
-
-  return "border-sky-200 bg-sky-50 text-sky-700";
 }
 
 function ActionIconButton({
@@ -778,17 +761,16 @@ export function ManagedKeyManager({
 }: {
   initialKeys: ManagedKeyListItem[];
 }) {
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
   const [keys, setKeys] = useState(initialKeys);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<KeyFilter>("claude");
   const [modelFilter, setModelFilter] = useState<string | null>(null);
   const [rawImport, setRawImport] = useState("");
-  const [notice, setNotice] = useState<Notice | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showPinned, setShowPinned] = useState(false);
+  const [showPinned, setShowPinned] = useState(true);
   const [showAvailable, setShowAvailable] = useState(true);
   const [showOther, setShowOther] = useState(true);
   const [testingIds, setTestingIds] = useState<Record<string, boolean>>({});
@@ -888,7 +870,7 @@ export function ManagedKeyManager({
 
   async function handleImport() {
     if (!rawImport.trim()) {
-      setNotice({ tone: "error", message: "请先粘贴原始 key 文本。" });
+      toast({ tone: "error", message: "请先粘贴原始 key 文本。" });
       return;
     }
 
@@ -902,7 +884,7 @@ export function ManagedKeyManager({
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { message?: string; keys?: ManagedKeyListItem[] }
+        | { message?: string; keys?: ManagedKeyListItem[]; newKeyIds?: string[] }
         | null;
 
       if (!response.ok || !payload?.keys) {
@@ -912,12 +894,42 @@ export function ManagedKeyManager({
       setKeys(payload.keys);
       setRawImport("");
       setShowImport(false);
-      setNotice({
+      toast({
         tone: "success",
         message: payload.message ?? `已导入 ${payload.keys.length} 条 key。`,
       });
+
+      // 自动测试本次新导入的 key
+      const untestedIds = (payload.newKeyIds ?? []).filter(
+        (id) => payload.keys!.find((k) => k.id === id)?.isTestable,
+      );
+
+      if (untestedIds.length > 0) {
+        let autoProgressId: string | null = toast({ tone: "info", duration: 0, message: `正在自动测试 ${untestedIds.length} 个新导入的 key…` });
+        let autoSuccess = 0;
+        let autoFail = 0;
+        let autoDone = 0;
+        const queue = [...untestedIds];
+        async function runWorker() {
+          while (queue.length > 0) {
+            const id = queue.shift();
+            if (!id) return;
+            const ok = await handleTest(id);
+            autoDone += 1;
+            if (ok) autoSuccess += 1; else autoFail += 1;
+            if (autoProgressId) dismiss(autoProgressId);
+            autoProgressId = toast({ tone: "info", duration: 0, message: `自动测试中：${autoDone} / ${untestedIds.length}，可用 ${autoSuccess}，失败 ${autoFail}。` });
+          }
+        }
+        void Promise.all(
+          Array.from({ length: Math.min(BATCH_TEST_CONCURRENCY, untestedIds.length) }, () => runWorker()),
+        ).then(() => {
+          if (autoProgressId) dismiss(autoProgressId);
+          toast({ tone: autoFail > 0 ? "info" : "success", message: `自动测试完成：${autoSuccess} 个可用，${autoFail} 个失败。` });
+        });
+      }
     } catch (error) {
-      setNotice({
+      toast({
         tone: "error",
         message: error instanceof Error ? error.message : "导入失败。",
       });
@@ -957,12 +969,12 @@ export function ManagedKeyManager({
       anchor.remove();
       window.URL.revokeObjectURL(url);
 
-      setNotice({
+      toast({
         tone: "success",
         message: `已导出 ${keys.length} 条 key。`,
       });
     } catch (error) {
-      setNotice({
+      toast({
         tone: "error",
         message: error instanceof Error ? error.message : "导出失败。",
       });
@@ -1011,9 +1023,9 @@ export function ManagedKeyManager({
         return next;
       });
       setDeleteTargetId((current) => (current === id ? null : current));
-      setNotice({ tone: "success", message: payload.message ?? "已删除。" });
+      toast({ tone: "success", message: payload.message ?? "已删除。" });
     } catch (error) {
-      setNotice({
+      toast({
         tone: "error",
         message: error instanceof Error ? error.message : "删除失败。",
       });
@@ -1088,13 +1100,13 @@ export function ManagedKeyManager({
       setKeys((current) =>
         current.map((item) => (item.id === id ? payload.key! : item)),
       );
-      setNotice({
+      toast({
         tone: "success",
         message: payload.message ?? fallbackMessage,
       });
       return payload.key;
     } catch (error) {
-      setNotice({
+      toast({
         tone: "error",
         message: error instanceof Error ? error.message : "保存失败。",
       });
@@ -1230,6 +1242,7 @@ export function ManagedKeyManager({
     let completedCount = 0;
 
     const queue = [...testableFilteredKeys];
+    let progressToastId: string | null = null;
 
     async function runWorker() {
       while (queue.length > 0) {
@@ -1248,17 +1261,20 @@ export function ManagedKeyManager({
           failureCount += 1;
         }
 
-        setNotice({
+        if (progressToastId) dismiss(progressToastId);
+        progressToastId = toast({
           tone: "info",
-          message: `并发测试中：${completedCount} / ${testableFilteredKeys.length}，可用 ${successCount}，失败 ${failureCount}。`,
+          duration: 0,
+          message: `测试中：${completedCount} / ${testableFilteredKeys.length}，可用 ${successCount}，失败 ${failureCount}。`,
         });
       }
     }
 
     try {
-      setNotice({
+      progressToastId = toast({
         tone: "info",
-        message: `开始并发测试，共 ${testableFilteredKeys.length} 个可测试 key，并发数 ${Math.min(BATCH_TEST_CONCURRENCY, testableFilteredKeys.length)}。`,
+        duration: 0,
+        message: `开始并发测试，共 ${testableFilteredKeys.length} 个可测试 key…`,
       });
 
       await Promise.all(
@@ -1267,7 +1283,8 @@ export function ManagedKeyManager({
         }, () => runWorker()),
       );
 
-      setNotice({
+      if (progressToastId) dismiss(progressToastId);
+      toast({
         tone: failureCount > 0 ? "info" : "success",
         message: `批量测试完成：${successCount} 个可用，${failureCount} 个失败。`,
       });
@@ -1370,15 +1387,6 @@ export function ManagedKeyManager({
               ) : null}
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {/* Notice */}
-      {notice ? (
-        <div
-          className={`rounded-xl border px-4 py-2.5 text-sm ${getToneClassName(notice.tone)}`}
-        >
-          {notice.message}
         </div>
       ) : null}
 

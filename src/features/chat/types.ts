@@ -17,3 +17,24 @@ export type ChatCompletionResult = {
   model: string;
   keyName: string;
 };
+
+export type ChatSessionListItem = {
+  id: string;
+  title: string;
+  keyId: string | null;
+  model: string | null;
+  updatedAt: string;
+};
+
+export type ChatSessionDetail = {
+  id: string;
+  title: string;
+  keyId: string | null;
+  model: string | null;
+  updatedAt: string;
+  messages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+  }>;
+};

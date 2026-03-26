@@ -16,6 +16,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { cn } from "@/lib/utils";
 
 type Mode = "password" | "email-code" | "register" | "reset-password";
@@ -386,13 +387,12 @@ export function LoginForm({ socialProviders, requireInviteCode }: LoginFormProps
           {(mode === "password" || mode === "register") && (
             <Field>
               <FieldLabel htmlFor="password">密码</FieldLabel>
-              <Input
+              <PasswordInput
                 id="password"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
                 disabled={isBusy}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="至少 8 位"
-                type="password"
                 value={password}
               />
               {mode === "password" ? (
@@ -413,13 +413,12 @@ export function LoginForm({ socialProviders, requireInviteCode }: LoginFormProps
           {mode === "register" && (
             <Field>
               <FieldLabel htmlFor="confirm-password">确认密码</FieldLabel>
-              <Input
+              <PasswordInput
                 id="confirm-password"
                 autoComplete="new-password"
                 disabled={isBusy}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="请再次输入密码"
-                type="password"
                 value={confirmPassword}
               />
             </Field>

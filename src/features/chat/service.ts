@@ -4,6 +4,8 @@ import type {
   ChatCompletionResult,
   ChatKeyOption,
   ChatMessageInput,
+  ChatSessionDetail,
+  ChatSessionListItem,
 } from "@/features/chat/types";
 
 function joinBaseUrl(baseUrl: string, path: string) {
@@ -141,6 +143,7 @@ export async function createChatCompletion(input: {
   keyId: string;
   model: string;
   messages: ChatMessageInput[];
+  signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
   const key = await prisma.managedKey.findUnique({
     where: { id: input.keyId },
@@ -179,6 +182,11 @@ export async function createChatCompletion(input: {
     throw new Error("当前模型不属于所选 key 的可用模型。");
   }
 
+  const timeoutSignal = AbortSignal.timeout(30000);
+  const requestSignal = input.signal
+    ? AbortSignal.any([input.signal, timeoutSignal])
+    : timeoutSignal;
+
   if (key.protocol === "anthropic") {
     const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
       method: "POST",
@@ -193,7 +201,7 @@ export async function createChatCompletion(input: {
         max_tokens: 2048,
         messages,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: requestSignal,
     });
 
     const payload = await response.json().catch(() => null);
@@ -227,7 +235,7 @@ export async function createChatCompletion(input: {
       model: input.model,
       messages,
     }),
-    signal: AbortSignal.timeout(30000),
+    signal: requestSignal,
   });
 
   const payload = await response.json().catch(() => null);
@@ -249,4 +257,102 @@ export async function createChatCompletion(input: {
     model: input.model,
     keyName: key.name,
   };
+}
+
+export async function listChatSessions(userId: string): Promise<ChatSessionListItem[]> {
+  const sessions = await prisma.chatSession.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      title: true,
+      keyId: true,
+      model: true,
+      updatedAt: true,
+    },
+  });
+
+  return sessions.map((s) => ({
+    id: s.id,
+    title: s.title,
+    keyId: s.keyId,
+    model: s.model,
+    updatedAt: s.updatedAt.toISOString(),
+  }));
+}
+
+export async function getChatSession(id: string, userId: string): Promise<ChatSessionDetail | null> {
+  const session = await prisma.chatSession.findUnique({
+    where: { id, userId },
+    include: {
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, role: true, content: true },
+      },
+    },
+  });
+
+  if (!session) {
+    return null;
+  }
+
+  return {
+    id: session.id,
+    title: session.title,
+    keyId: session.keyId,
+    model: session.model,
+    updatedAt: session.updatedAt.toISOString(),
+    messages: session.messages.map((m) => ({
+      id: m.id,
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+  };
+}
+
+export async function createChatSession(input: {
+  title: string;
+  keyId: string | null;
+  model: string | null;
+  userId: string;
+}): Promise<ChatSessionListItem> {
+  const session = await prisma.chatSession.create({
+    data: {
+      title: input.title,
+      keyId: input.keyId,
+      model: input.model,
+      userId: input.userId,
+    },
+  });
+
+  return {
+    id: session.id,
+    title: session.title,
+    keyId: session.keyId,
+    model: session.model,
+    updatedAt: session.updatedAt.toISOString(),
+  };
+}
+
+export async function renameChatSession(id: string, userId: string, title: string): Promise<void> {
+  await prisma.chatSession.update({ where: { id, userId }, data: { title } });
+}
+
+export async function deleteChatSession(id: string, userId: string): Promise<void> {
+  await prisma.chatSession.delete({ where: { id, userId } });
+}
+
+export async function appendChatMessages(
+  sessionId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): Promise<void> {
+  await prisma.$transaction([
+    prisma.chatMessage.createMany({
+      data: messages.map((m) => ({ sessionId, role: m.role, content: m.content })),
+    }),
+    prisma.chatSession.update({
+      where: { id: sessionId },
+      data: { updatedAt: new Date() },
+    }),
+  ]);
 }

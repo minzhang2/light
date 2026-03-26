@@ -30,5 +30,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     message: `已导入并合并 ${result.parsedCount} 条唯一 key。`,
     keys: result.keys,
+    newKeyIds: result.newKeyIds,
   });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { createChatCompletion } from "@/features/chat/service";
+import { appendChatMessages, createChatCompletion } from "@/features/chat/service";
 import type { ChatMessageInput } from "@/features/chat/types";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 
@@ -16,6 +16,7 @@ export async function POST(request: Request) {
         keyId?: unknown;
         model?: unknown;
         messages?: unknown;
+        sessionId?: unknown;
       }
     | null;
 
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
   ) {
     return NextResponse.json({ message: "参数不完整。" }, { status: 400 });
   }
+
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
 
   const messages = body.messages
     .filter((item): item is ChatMessageInput => {
@@ -42,14 +45,31 @@ export async function POST(request: Request) {
     });
 
   try {
+    const lastUserMsg = messages[messages.length - 1];
+
+    if (sessionId && lastUserMsg) {
+      await appendChatMessages(sessionId, [
+        { role: lastUserMsg.role, content: lastUserMsg.content },
+      ]);
+    }
+
     const result = await createChatCompletion({
       keyId: body.keyId,
       model: body.model,
       messages,
+      signal: request.signal,
     });
+
+    if (sessionId) {
+      await appendChatMessages(sessionId, [{ role: "assistant", content: result.content }]);
+    }
 
     return NextResponse.json({ message: result.content, result });
   } catch (error) {
+    if (request.signal.aborted) {
+      return new Response(null, { status: 499 });
+    }
+
     const message =
       error instanceof Error ? error.message : "聊天请求失败，请稍后再试。";
 

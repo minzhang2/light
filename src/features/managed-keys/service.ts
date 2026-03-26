@@ -407,6 +407,7 @@ export async function exportManagedKeys() {
 
 export async function importManagedKeys(raw: string) {
   const entries = parseManagedKeys(raw);
+  const newKeyIds: string[] = [];
 
   for (const entry of entries) {
     const existing = await prisma.managedKey.findUnique({
@@ -415,15 +416,20 @@ export async function importManagedKeys(raw: string) {
 
     const data = mergeExistingWithParsed(existing, entry);
 
-    await prisma.managedKey.upsert({
+    const record = await prisma.managedKey.upsert({
       where: { fingerprint: entry.fingerprint },
       create: data,
       update: data,
     });
+
+    if (!existing) {
+      newKeyIds.push(record.id);
+    }
   }
 
   return {
     parsedCount: entries.length,
+    newKeyIds,
     keys: await listManagedKeys(),
   };
 }
@@ -480,11 +486,6 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
     launchCommand,
   ]);
 
-  const shouldResetTestState =
-    existing.secret !== secret ||
-    existing.baseUrl !== baseUrl ||
-    (existing.model ?? null) !== model;
-
   try {
     const updated = await prisma.managedKey.update({
       where: { id },
@@ -497,14 +498,6 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
         isTestable,
         isPinned,
         fingerprint: nextFingerprint,
-        ...(shouldResetTestState
-          ? {
-              availableModels: null,
-              lastTestStatus: null,
-              lastTestMessage: null,
-              lastTestAt: null,
-            }
-          : null),
       },
     });
 
