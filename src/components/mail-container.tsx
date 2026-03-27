@@ -87,7 +87,14 @@ function MailboxSidebar({
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">选择用户</p>
             <div className="flex items-center gap-2">
-              <Select value={token} onValueChange={onTokenChange}>
+              <Select
+                value={token}
+                onValueChange={(value) => {
+                  if (value) {
+                    onTokenChange(value);
+                  }
+                }}
+              >
                 <SelectTrigger className="min-w-0 flex-1">
                   <span className="truncate">{selectedTokenLabel}</span>
                 </SelectTrigger>
