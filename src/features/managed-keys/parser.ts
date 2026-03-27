@@ -36,6 +36,10 @@ function parseExportLine(line: string) {
   return { key, value };
 }
 
+function blockHasAuthToken(block: BlockState) {
+  return Boolean(block.values.ANTHROPIC_AUTH_TOKEN || block.values.OPENAI_API_KEY);
+}
+
 function normalizeLabel(label: string | null) {
   if (!label) {
     return null;
@@ -248,7 +252,9 @@ export function parseManagedKeys(raw: string) {
     const isAuthStart =
       parsedLine.key === "ANTHROPIC_AUTH_TOKEN" || parsedLine.key === "OPENAI_API_KEY";
 
-    if (isAuthStart && (Object.keys(block.values).length > 0 || block.launchCommand)) {
+    // Auth env signals a new block only when a block already has auth;
+    // this allows valid orders like BASE_URL first, AUTH_TOKEN second.
+    if (isAuthStart && blockHasAuthToken(block)) {
       flush();
     }
 

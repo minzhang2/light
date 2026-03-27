@@ -117,7 +117,78 @@ function extractOpenAiText(payload: unknown) {
     .trim();
 }
 
+function normalizeProviderLabels(message: string) {
+  const normalized = message
+    .replaceAll("Anthropic", "Claude")
+    .replaceAll("OpenAI", "Codex")
+    .replaceAll("Claude 协议可用", "Claude 可用")
+    .replaceAll("Codex 协议可用", "Codex 可用");
+
+  return normalized
+    .replace(/Claude\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
+      isClaudeModel(model)
+        ? `Claude 可用（测试模型：${model}）`
+        : `Codex 可用（测试模型：${model}）`,
+    )
+    .replace(/Codex\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
+      isClaudeModel(model)
+        ? `Claude 可用（测试模型：${model}）`
+        : `Codex 可用（测试模型：${model}）`,
+    );
+}
+
+function getSupportedTags(message: string | null) {
+  if (!message) {
+    return {
+      anthropic: false,
+      openai: false,
+    };
+  }
+
+  const normalizedMessage = normalizeProviderLabels(message);
+  const hasClaude = /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(
+    normalizedMessage,
+  );
+  const hasCodex = /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(
+    normalizedMessage,
+  );
+
+  return {
+    anthropic: hasClaude,
+    openai: hasCodex,
+  };
+}
+
+function isClaudeModel(model: string) {
+  return /(claude|sonnet|opus|haiku)/i.test(model);
+}
+
+function pickRequestProtocol(input: {
+  model: string;
+  tags: { anthropic: boolean; openai: boolean };
+}) {
+  const { tags } = input;
+
+  if (tags.anthropic && !tags.openai) {
+    return "anthropic" as const;
+  }
+
+  if (tags.openai && !tags.anthropic) {
+    return "openai" as const;
+  }
+
+  if (tags.anthropic && tags.openai) {
+    return isClaudeModel(input.model) ? "anthropic" : "openai";
+  }
+
+  return null;
+}
+
 export function toChatKeyOption(key: ManagedKeyListItem): ChatKeyOption | null {
+  if (!key.isTestable) {
+    return null;
+  }
+
   if (key.lastTestStatus !== "success") {
     return null;
   }
@@ -129,11 +200,16 @@ export function toChatKeyOption(key: ManagedKeyListItem): ChatKeyOption | null {
     return null;
   }
 
+  const supportedTags = getSupportedTags(key.lastTestMessage);
+  const supportsClaude = supportedTags.anthropic;
+  const supportsCodex = supportedTags.openai;
+
   return {
     id: key.id,
     name: key.name,
     group: key.group,
-    protocol: key.protocol,
+    supportsClaude,
+    supportsCodex,
     models,
     defaultModel,
   };
@@ -150,12 +226,13 @@ export async function createChatCompletion(input: {
     select: {
       id: true,
       name: true,
-      protocol: true,
+      isTestable: true,
       baseUrl: true,
       secret: true,
       model: true,
       availableModels: true,
       lastTestStatus: true,
+      lastTestMessage: true,
     },
   });
 
@@ -165,6 +242,10 @@ export async function createChatCompletion(input: {
 
   if (key.lastTestStatus !== "success") {
     throw new Error("当前 key 尚未通过可用性测试。");
+  }
+
+  if (!key.isTestable) {
+    throw new Error("当前 key 已禁用测试，不可用于聊天。");
   }
 
   const messages = normalizeChatMessages(input.messages);
@@ -186,8 +267,17 @@ export async function createChatCompletion(input: {
   const requestSignal = input.signal
     ? AbortSignal.any([input.signal, timeoutSignal])
     : timeoutSignal;
+  const supportedTags = getSupportedTags(key.lastTestMessage);
+  const requestProtocol = pickRequestProtocol({
+    model: input.model,
+    tags: supportedTags,
+  });
 
-  if (key.protocol === "anthropic") {
+  if (!requestProtocol) {
+    throw new Error("当前 key 未识别到可用标签，请先重新测试。");
+  }
+
+  if (requestProtocol === "anthropic") {
     const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
       method: "POST",
       headers: {
@@ -352,6 +442,29 @@ export async function appendChatMessages(
     }),
     prisma.chatSession.update({
       where: { id: sessionId },
+      data: { updatedAt: new Date() },
+    }),
+  ]);
+}
+
+export async function replaceChatMessages(
+  sessionId: string,
+  userId: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): Promise<void> {
+  await prisma.chatSession.findUniqueOrThrow({ where: { id: sessionId, userId }, select: { id: true } });
+
+  await prisma.$transaction([
+    prisma.chatMessage.deleteMany({ where: { sessionId } }),
+    prisma.chatMessage.createMany({
+      data: messages.map((message) => ({
+        sessionId,
+        role: message.role,
+        content: message.content,
+      })),
+    }),
+    prisma.chatSession.update({
+      where: { id: sessionId, userId },
       data: { updatedAt: new Date() },
     }),
   ]);

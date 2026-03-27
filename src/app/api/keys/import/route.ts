@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { importManagedKeys } from "@/features/managed-keys/service";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 
 export async function POST(request: Request) {
@@ -18,18 +19,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "请先粘贴原始 key 文本。" }, { status: 400 });
   }
 
-  const result = await importManagedKeys(body.raw);
+  try {
+    const result = await importManagedKeys(body.raw);
 
-  if (result.parsedCount === 0) {
-    return NextResponse.json(
-      { message: "没有识别到可导入的 key，请检查格式。" },
-      { status: 400 },
-    );
+    if (result.parsedCount === 0) {
+      return NextResponse.json(
+        { message: "没有识别到可导入的 key，请检查格式。" },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({
+      message: `已导入并合并 ${result.parsedCount} 条唯一 key。`,
+      keys: result.keys,
+      newKeyIds: result.newKeyIds,
+    });
+  } catch (error) {
+    const message = getApiErrorMessage(error, "导入失败，请稍后重试。");
+    return NextResponse.json({ message }, { status: 500 });
   }
-
-  return NextResponse.json({
-    message: `已导入并合并 ${result.parsedCount} 条唯一 key。`,
-    keys: result.keys,
-    newKeyIds: result.newKeyIds,
-  });
 }

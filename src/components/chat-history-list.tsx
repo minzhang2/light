@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import type { ChatSessionListItem } from "@/features/chat/types";
 import { Button } from "@/components/ui/button";
@@ -49,13 +49,14 @@ export function ChatHistoryList({
   refreshKey?: number;
 }) {
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchSessions() {
-      setLoading(true);
+      setIsInitialLoading(!hasLoadedOnceRef.current);
       try {
         const res = await fetch("/api/chat/sessions", { cache: "no-store" });
         if (!res.ok || cancelled) {
@@ -68,7 +69,8 @@ export function ChatHistoryList({
         }
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          hasLoadedOnceRef.current = true;
+          setIsInitialLoading(false);
         }
       }
     }
@@ -105,10 +107,10 @@ export function ChatHistoryList({
         </Button>
       </div>
       <div className="flex-1 overflow-y-auto px-2 pb-4">
-        {loading && (
+        {isInitialLoading && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">加载中...</p>
         )}
-        {!loading && sessions.length === 0 && (
+        {!isInitialLoading && sessions.length === 0 && (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">暂无历史对话</p>
         )}
         {groups.map((group) => (

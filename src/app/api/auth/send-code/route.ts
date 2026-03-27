@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { issueLoginCode, OtpRateLimitError } from "@/lib/auth/otp";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -39,8 +40,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[auth] failed to send login code", error);
+    const message = getApiErrorMessage(error, "发送验证码失败，请稍后重试。");
     return NextResponse.json(
-      { message: "发送验证码失败，请稍后重试。" },
+      { message },
       { status: 500 },
     );
   }

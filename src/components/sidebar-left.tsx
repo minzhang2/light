@@ -13,91 +13,69 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
-  AudioLinesIcon,
   KeyRoundIcon,
   MailIcon,
   MessageCircleIcon,
-  TerminalIcon,
 } from "lucide-react"
-
-// This is sample data.
-const data = {
-  teams: [
-    {
-      name: "Acme Inc",
-      logo: (
-        <TerminalIcon
-        />
-      ),
-      plan: "Enterprise",
-    },
-    {
-      name: "Acme Corp.",
-      logo: (
-        <AudioLinesIcon
-        />
-      ),
-      plan: "Startup",
-    },
-    {
-      name: "Evil Corp.",
-      logo: (
-        <TerminalIcon
-        />
-      ),
-      plan: "Free",
-    },
-  ],
-  navSecondary: [] as { title: string; url: string; icon: React.ReactNode; badge?: React.ReactNode }[],
-}
+const navSecondary: { title: string; url: string; icon: React.ReactNode; badge?: React.ReactNode }[] = []
 
 export function SidebarLeft({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
-  const navMain = [
+  const navMainSections = [
     {
-      title: "聊天",
-      url: "/dashboard/chat",
-      icon: (
-        <MessageCircleIcon
-        />
-      ),
-      isActive: pathname.startsWith("/dashboard/chat"),
+      title: "仪表盘",
+      items: [
+        {
+          title: "聊天",
+          url: "/dashboard/chat",
+          icon: (
+            <MessageCircleIcon
+            />
+          ),
+          isActive: pathname.startsWith("/dashboard/chat"),
+        },
+      ],
     },
     {
-      title: "Key 管理",
-      url: "/dashboard/keys",
-      icon: (
-        <KeyRoundIcon
-        />
-      ),
-      isActive: pathname.startsWith("/dashboard/keys"),
-    },
-    {
-      title: "临时邮箱",
-      url: "/dashboard/mail",
-      icon: (
-        <MailIcon
-        />
-      ),
-      isActive: pathname.startsWith("/dashboard/mail"),
+      title: "设置",
+      items: [
+        {
+          title: "Key 管理",
+          url: "/dashboard/keys",
+          icon: (
+            <KeyRoundIcon
+            />
+          ),
+          isActive: pathname.startsWith("/dashboard/keys"),
+        },
+        {
+          title: "临时邮箱",
+          url: "/dashboard/mail",
+          icon: (
+            <MailIcon
+            />
+          ),
+          isActive: pathname.startsWith("/dashboard/mail"),
+        },
+      ],
     },
   ]
 
   return (
     <Sidebar className="border-r-0" {...props}>
-      <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
-        <NavMain items={navMain} />
+      <SidebarHeader className="px-4 pt-6 pb-2">
+        <TeamSwitcher name="light" />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="px-4 pb-4">
+        <NavMain sections={navMainSections} />
         <NavSecondary
-          items={data.navSecondary.map((item) => ({
+          items={navSecondary.map((item) => ({
             ...item,
             isActive: pathname.startsWith(item.url),
           }))}
-          className="mt-auto"
+          className="mt-5"
         />
       </SidebarContent>
       <SidebarRail />

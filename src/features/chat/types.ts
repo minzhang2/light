@@ -7,7 +7,8 @@ export type ChatKeyOption = {
   id: string;
   name: string;
   group: "claude" | "codex";
-  protocol: "anthropic" | "openai";
+  supportsClaude: boolean;
+  supportsCodex: boolean;
   models: string[];
   defaultModel: string;
 };

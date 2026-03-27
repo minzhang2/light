@@ -255,6 +255,96 @@ function pickDiscoveredModel(models: string[], preferredGroup: ManagedKeyListIte
   return models[0] ?? null;
 }
 
+function pickModelForTest(key: ManagedKeyListItem, discoveredModels: string[]) {
+  if (key.model && discoveredModels.includes(key.model)) {
+    return key.model;
+  }
+
+  return pickDiscoveredModel(discoveredModels, key.group);
+}
+
+function isClaudeFamilyModel(model: string) {
+  return /(claude|sonnet|opus|haiku|anthropic)/i.test(model);
+}
+
+type ProviderTag = "claude" | "codex";
+
+function summarizeTagAvailability(input: {
+  tag: ProviderTag;
+  results: ManagedKeyTestResult[];
+}) {
+  const label = input.tag === "claude" ? "Claude" : "Codex";
+  const matchedModel = input.results
+    .filter((result) => result.ok && Boolean(result.discoveredModel))
+    .map((result) => result.discoveredModel as string)
+    .find((model) =>
+      input.tag === "claude" ? isClaudeFamilyModel(model) : !isClaudeFamilyModel(model),
+    );
+
+  if (matchedModel) {
+    return {
+      ok: true,
+      discoveredModel: matchedModel,
+      message: `${label} 可用（测试模型：${matchedModel}）`,
+    };
+  }
+
+  const hasAccessibleModelList = input.results.some((result) => result.ok);
+  if (hasAccessibleModelList) {
+    return {
+      ok: false,
+      discoveredModel: null,
+      message: `${label} 未验证（模型列表可访问，但未识别出可测试模型）`,
+    };
+  }
+
+  const firstErrorMessage = input.results.find((result) => !result.ok)?.message;
+  return {
+    ok: false,
+    discoveredModel: null,
+    message: `${label} 不可用：${firstErrorMessage ?? "请求失败，请稍后再试。"}`,
+  };
+}
+
+function buildCombinedTestMessage(input: {
+  claudeSummary: ReturnType<typeof summarizeTagAvailability>;
+  codexSummary: ReturnType<typeof summarizeTagAvailability>;
+}) {
+  return `${input.claudeSummary.message}；${input.codexSummary.message}`;
+}
+
+function buildTestInputByProtocol(
+  key: ManagedKeyListItem,
+  protocol: ManagedKeyProtocol,
+): ManagedKeyListItem {
+  return {
+    ...key,
+    protocol,
+    group: protocol === "openai" ? "codex" : "claude",
+  };
+}
+
+async function runProtocolTest(
+  key: ManagedKeyListItem,
+  protocol: ManagedKeyProtocol,
+): Promise<ManagedKeyTestResult> {
+  try {
+    const candidate = buildTestInputByProtocol(key, protocol);
+    return protocol === "anthropic"
+      ? await testAnthropicKey(candidate)
+      : await testOpenAiKey(candidate);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "请求失败，请稍后再试。",
+      statusCode: null,
+      testedAt: new Date().toISOString(),
+      discoveredModel: null,
+      discoveredModels: [],
+    };
+  }
+}
+
 function extractErrorMessage(payload: unknown) {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -274,7 +364,7 @@ function extractErrorMessage(payload: unknown) {
 
 async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTestResult> {
   const discovered = await discoverAnthropicModels(key);
-  const discoveredModel = key.model ?? pickDiscoveredModel(discovered.ids, key.group);
+  const discoveredModel = pickModelForTest(key, discovered.ids);
 
   if (!discovered.response.ok) {
     return {
@@ -324,7 +414,7 @@ async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTest
   return {
     ok: response.ok,
     message: response.ok
-      ? `Claude 协议可用，测试模型：${discoveredModel}`
+      ? `Claude 可用，测试模型：${discoveredModel}`
       : extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`,
     statusCode: response.status,
     testedAt: new Date().toISOString(),
@@ -335,7 +425,7 @@ async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTest
 
 async function testOpenAiKey(key: ManagedKeyListItem): Promise<ManagedKeyTestResult> {
   const discovered = await discoverOpenAiModels(key);
-  const discoveredModel = key.model ?? pickDiscoveredModel(discovered.ids, key.group);
+  const discoveredModel = pickModelForTest(key, discovered.ids);
 
   if (!discovered.response.ok) {
     return {
@@ -383,7 +473,7 @@ async function testOpenAiKey(key: ManagedKeyListItem): Promise<ManagedKeyTestRes
   return {
     ok: response.ok,
     message: response.ok
-      ? `Codex 协议可用，测试模型：${discoveredModel}`
+      ? `Codex 可用，测试模型：${discoveredModel}`
       : extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`,
     statusCode: response.status,
     testedAt: new Date().toISOString(),
@@ -528,17 +618,56 @@ export async function testManagedKey(id: string) {
   }
 
   const listItem = toListItem(key);
+  const [anthropicResult, openAiResult] = await Promise.all([
+    runProtocolTest(listItem, "anthropic"),
+    runProtocolTest(listItem, "openai"),
+  ]);
+  const protocolResults = [anthropicResult, openAiResult];
+  const claudeSummary = summarizeTagAvailability({
+    tag: "claude",
+    results: protocolResults,
+  });
+  const codexSummary = summarizeTagAvailability({
+    tag: "codex",
+    results: protocolResults,
+  });
 
-  const result =
-    listItem.protocol === "anthropic"
-      ? await testAnthropicKey(listItem)
-      : await testOpenAiKey(listItem);
+  const combinedMessage = buildCombinedTestMessage({
+    claudeSummary,
+    codexSummary,
+  });
+
+  const discoveredModels = [...new Set([
+    ...anthropicResult.discoveredModels,
+    ...openAiResult.discoveredModels,
+  ])];
+  const overallOk = claudeSummary.ok || codexSummary.ok;
+  const preferredDiscoveredModel =
+    listItem.group === "claude"
+      ? claudeSummary.discoveredModel ?? codexSummary.discoveredModel
+      : codexSummary.discoveredModel ?? claudeSummary.discoveredModel;
+  const discoveredModel =
+    overallOk
+      ? preferredDiscoveredModel ?? pickDiscoveredModel(discoveredModels, listItem.group)
+      : null;
+
+  const result: ManagedKeyTestResult = {
+    ...anthropicResult,
+    ok: overallOk,
+    message: combinedMessage,
+    statusCode: overallOk
+      ? 200
+      : anthropicResult.statusCode ?? openAiResult.statusCode,
+    testedAt: new Date().toISOString(),
+    discoveredModel,
+    discoveredModels,
+  };
 
   await prisma.managedKey.update({
     where: { id },
     data: {
       lastTestStatus: result.ok ? "success" : "error",
-      lastTestMessage: result.message,
+      lastTestMessage: combinedMessage,
       lastTestAt: new Date(result.testedAt),
     },
   });

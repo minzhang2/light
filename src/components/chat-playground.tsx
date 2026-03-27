@@ -1,15 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowUpIcon,
   CheckIcon,
   ClipboardIcon,
   MessageCircleIcon,
+  RefreshCwIcon,
   SquareIcon,
+  Trash2Icon,
 } from "lucide-react";
 
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ChatKeyOption, ChatMessageInput, ChatSessionDetail } from "@/features/chat/types";
 import { cn } from "@/lib/utils";
 
@@ -26,10 +37,59 @@ type ChatMessage = ChatMessageInput & {
   id: string;
   keyName?: string;
   model?: string;
+  failed?: boolean;
 };
 
 const STORAGE_KEY_ID = "chat:selected-key-id";
 const STORAGE_MODEL = "chat:selected-model";
+
+function MessageActionButton({
+  onClick,
+  icon,
+  label,
+  disabled = false,
+  destructive = false,
+}: {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  const button = (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      disabled={disabled}
+      className={cn(
+        "inline-flex items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-50",
+        destructive
+          ? "text-destructive hover:text-destructive/80"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {icon}
+    </button>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function MessageActions({
+  children,
+  align,
+}: {
+  children: React.ReactNode;
+  align: "start" | "end";
+}) {
+  return <div className={cn("flex gap-1.5", align === "end" ? "justify-end" : "justify-start")}>{children}</div>;
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -42,19 +102,69 @@ function CopyButton({ text }: { text: string }) {
   }
 
   return (
-    <button
-      type="button"
+    <MessageActionButton
       onClick={handleCopy}
-      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-    >
-      {copied ? (
-        <CheckIcon className="h-3.5 w-3.5" />
-      ) : (
-        <ClipboardIcon className="h-3.5 w-3.5" />
-      )}
-      {copied ? "已复制" : "复制"}
-    </button>
+      label={copied ? "已复制" : "复制"}
+      icon={copied ? <CheckIcon className="h-[14px] w-[14px]" /> : <ClipboardIcon className="h-[14px] w-[14px]" />}
+    />
   );
+}
+
+function getMessagesForRequest(messages: ChatMessageInput[]) {
+  return messages.map((item) => ({
+    role: item.role,
+    content: item.content,
+  }));
+}
+
+function KeySupportBadges({
+  keyOption,
+  className,
+}: {
+  keyOption: ChatKeyOption;
+  className?: string;
+}) {
+  const showClaude =
+    typeof keyOption.supportsClaude === "boolean"
+      ? keyOption.supportsClaude
+      : keyOption.group === "claude";
+  const showCodex =
+    typeof keyOption.supportsCodex === "boolean"
+      ? keyOption.supportsCodex
+      : keyOption.group === "codex";
+
+  return (
+    <span className={cn("inline-flex items-center gap-1", className)}>
+      {showClaude ? (
+        <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+          Claude
+        </span>
+      ) : null}
+      {showCodex ? (
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+          Codex
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function getRetryableUserMessageIds(messages: ChatMessage[]) {
+  const ids: string[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message.role !== "user") {
+      continue;
+    }
+
+    const nextMessage = messages[index + 1];
+    if (!nextMessage || nextMessage.role !== "assistant") {
+      ids.push(message.id);
+    }
+  }
+
+  return ids;
 }
 
 function makeMessageId() {
@@ -113,8 +223,13 @@ export function ChatPlayground({
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     (initialSession?.messages ?? []).map((m) => ({ ...m })),
   );
+  const [isInitialViewportReady, setIsInitialViewportReady] = useState(
+    () => (initialSession?.messages.length ?? 0) === 0,
+  );
   const [isSending, setIsSending] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(externalSessionId ?? null);
+  const [deleteTargetMessageId, setDeleteTargetMessageId] = useState<string | null>(null);
+  const [isDeletingMessage, setIsDeletingMessage] = useState(false);
   const pendingCreatedSessionIdRef = useRef<string | null>(null);
   const { toast } = useToast();
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -123,6 +238,10 @@ export function ChatPlayground({
   const messagesStateRef = useRef<ChatMessage[]>((initialSession?.messages ?? []).map((m) => ({ ...m })));
 
   const selectedKey = findKey(keys, selectedKeyId);
+  const retryableMessageIds = getRetryableUserMessageIds(messages);
+  const deleteTargetMessage = deleteTargetMessageId
+    ? messages.find((message) => message.id === deleteTargetMessageId) ?? null
+    : null;
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -171,7 +290,11 @@ export function ChatPlayground({
 
       // "New chat" — clear right away since there's no data to wait for.
       if (externalSessionId === null) {
+        const nextKeyId = getInitialKeyId(keys);
+        const nextModel = getInitialModel(keys, nextKeyId);
         setMessages([]);
+        setSelectedKeyId(nextKeyId);
+        setSelectedModel(nextModel);
         pendingCreatedSessionIdRef.current = null;
         return;
       }
@@ -232,7 +355,7 @@ export function ChatPlayground({
     }
   }, [selectedKey, selectedModel]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = messagesRef.current;
 
     if (!container) {
@@ -240,7 +363,11 @@ export function ChatPlayground({
     }
 
     container.scrollTop = container.scrollHeight;
-  }, [messages, isSending]);
+
+    if (!isInitialViewportReady) {
+      setIsInitialViewportReady(true);
+    }
+  }, [messages, isSending, isInitialViewportReady]);
 
   async function ensureSession(
     firstMessage: string,
@@ -326,10 +453,7 @@ export function ChatPlayground({
         body: JSON.stringify({
           keyId: selectedKey.id,
           model: selectedModel,
-          messages: nextMessages.map((item) => ({
-            role: item.role,
-            content: item.content,
-          })),
+          messages: getMessagesForRequest(nextMessages),
           sessionId: activeSessionId,
         }),
         signal: controller.signal,
@@ -389,6 +513,153 @@ export function ChatPlayground({
     }
   }
 
+  async function handleRetry(messageId: string) {
+    if (isSending) {
+      return;
+    }
+
+    if (!selectedKey) {
+      toast({ tone: "error", message: "当前没有可用的 key，请先到 Key 管理页测试 key。" });
+      return;
+    }
+
+    if (!selectedModel) {
+      toast({ tone: "error", message: "请先选择模型。" });
+      return;
+    }
+
+    const messageIndex = messages.findIndex((item) => item.id === messageId);
+    const targetMessage = messageIndex >= 0 ? messages[messageIndex] : null;
+
+    if (!targetMessage || targetMessage.role !== "user") {
+      return;
+    }
+
+    const nextMessages = [
+      ...messages.slice(0, messageIndex),
+      ...messages.slice(messageIndex + 1),
+      targetMessage,
+    ];
+    setMessages(nextMessages);
+    setIsSending(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const activeSessionId = await ensureSession(nextMessages[nextMessages.length - 1]?.content ?? "", controller.signal);
+
+      if (controller.signal.aborted || abortControllerRef.current !== controller) {
+        return;
+      }
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyId: selectedKey.id,
+          model: selectedModel,
+          messages: getMessagesForRequest(nextMessages),
+          sessionId: activeSessionId,
+        }),
+        signal: controller.signal,
+      });
+
+      if (controller.signal.aborted || abortControllerRef.current !== controller) {
+        return;
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | { message?: string; result?: { content: string; keyName: string; model: string } }
+        | null;
+
+      if (!response.ok || !payload?.result) {
+        throw new Error(payload?.message ?? "聊天请求失败。");
+      }
+      const result = payload.result;
+
+      if (controller.signal.aborted || abortControllerRef.current !== controller) {
+        return;
+      }
+
+      setMessages((current) => [
+        ...current,
+        {
+          id: makeMessageId(),
+          role: "assistant",
+          content: result.content,
+          keyName: result.keyName,
+          model: result.model,
+        },
+      ]);
+      onSessionUpdated?.();
+    } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) {
+        return;
+      }
+
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "聊天请求失败。",
+        duration: 3600,
+      });
+    } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+
+      setIsSending(false);
+    }
+  }
+
+  async function syncSessionMessages(nextMessages: ChatMessage[]) {
+    if (!sessionIdRef.current) {
+      return;
+    }
+
+    const response = await fetch(`/api/chat/sessions/${sessionIdRef.current}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: getMessagesForRequest(nextMessages) }),
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new Error(payload?.message ?? "更新消息失败。");
+    }
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (isSending || isDeletingMessage) {
+      return;
+    }
+
+    const nextMessages = messages.filter((message) => message.id !== messageId);
+
+    if (nextMessages.length === messages.length) {
+      setDeleteTargetMessageId(null);
+      return;
+    }
+
+    const previousMessages = messages;
+
+    setDeleteTargetMessageId(null);
+    setIsDeletingMessage(true);
+    setMessages(nextMessages);
+
+    try {
+      await syncSessionMessages(nextMessages);
+    } catch (error) {
+      setMessages(previousMessages);
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "删除消息失败。",
+      });
+    } finally {
+      setIsDeletingMessage(false);
+    }
+  }
+
   function handleCancelSend() {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
@@ -425,7 +696,10 @@ export function ChatPlayground({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div
         ref={messagesRef}
-        className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 md:px-8 md:pt-8"
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-4 pt-5 md:px-8 md:pt-8",
+          !isInitialViewportReady && messages.length > 0 && "invisible",
+        )}
       >
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 pb-6">
           {messages.length === 0 ? (
@@ -460,9 +734,25 @@ export function ChatPlayground({
                   >
                     {message.content}
                   </div>
-                  <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
+                  <MessageActions align={message.role === "user" ? "end" : "start"}>
+                    {retryableMessageIds.includes(message.id) ? (
+                      <MessageActionButton
+                        onClick={() => void handleRetry(message.id)}
+                        label="重发"
+                        icon={<RefreshCwIcon className="h-[14px] w-[14px]" />}
+                      />
+                    ) : null}
                     <CopyButton text={message.content} />
-                  </div>
+                    {!isSending ? (
+                      <MessageActionButton
+                        onClick={() => setDeleteTargetMessageId(message.id)}
+                        label="删除"
+                        disabled={isDeletingMessage}
+                        destructive
+                        icon={<Trash2Icon className="h-[14px] w-[14px]" />}
+                      />
+                    ) : null}
+                  </MessageActions>
                 </div>
               </div>
             ))
@@ -496,7 +786,7 @@ export function ChatPlayground({
                 }
               }}
               placeholder="输入消息，Enter 发送，Shift + Enter 换行"
-              className="min-h-16 resize-none border-0 bg-transparent px-5 pt-4 pb-2 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+              className="min-h-16 resize-none border-0 bg-transparent px-5 pt-4 pb-2 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
             />
             <div className="flex items-center gap-1.5 px-4 pb-2">
               <div className="shrink-0">
@@ -515,14 +805,24 @@ export function ChatPlayground({
                     id="chat-key"
                     className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[popup-open=true]:border-transparent data-[popup-open=true]:ring-0"
                   >
-                    <span className="max-w-24 truncate md:max-w-40">
-                      {selectedKey ? <><span>{selectedKey.name}</span><span className="hidden md:inline"> · {selectedKey.group}</span></> : "选择 Key"}
+                    <span className="inline-flex min-w-0 items-center gap-1">
+                      {selectedKey ? (
+                        <>
+                          <span className="max-w-24 truncate md:max-w-40">{selectedKey.name}</span>
+                          <KeySupportBadges keyOption={selectedKey} />
+                        </>
+                      ) : (
+                        <span className="max-w-24 truncate md:max-w-40">选择 Key</span>
+                      )}
                     </span>
                   </SelectTrigger>
                   <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[calc(100vw-2rem)]">
                     {keys.map((item) => (
                       <SelectItem key={item.id} value={item.id} className="whitespace-nowrap">
-                        {item.name} · {item.group}
+                        <span className="inline-flex items-center gap-2">
+                          <span>{item.name}</span>
+                          <KeySupportBadges keyOption={item} />
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -578,6 +878,56 @@ export function ChatPlayground({
           </div>
         </div>
       </div>
+
+      <AlertDialog
+        open={Boolean(deleteTargetMessageId)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingMessage) {
+            setDeleteTargetMessageId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除这条消息？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTargetMessage ? (
+                <>
+                  将删除
+                  <span className="mx-1 font-medium text-foreground">
+                    {deleteTargetMessage.role === "user" ? "用户消息" : "助手消息"}
+                  </span>
+                  ，此操作不可撤销。
+                </>
+              ) : (
+                "此操作不可撤销。"
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTargetMessageId(null)}
+              disabled={isDeletingMessage}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (deleteTargetMessageId) {
+                  void handleDeleteMessage(deleteTargetMessageId);
+                }
+              }}
+              disabled={isDeletingMessage}
+            >
+              {isDeletingMessage ? "删除中..." : "确认删除"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -69,9 +69,20 @@ export function DashboardMobileAsideTrigger() {
 
   if (!context) return null;
 
+  const userInitial = context.user.name.slice(0, 1).toUpperCase() || "U";
+
   return (
-    <Button onClick={context.toggle} size="icon-sm" type="button" variant="ghost">
-      <PanelRightIcon />
+    <Button
+      onClick={context.toggle}
+      size="sm"
+      type="button"
+      variant="ghost"
+      className="h-9 rounded-2xl bg-transparent px-1.5 hover:bg-muted/90"
+    >
+      <span className="flex size-7 items-center justify-center rounded-xl bg-zinc-900 text-xs font-semibold text-white">
+        {userInitial}
+      </span>
+      <PanelRightIcon className="size-3.5 text-muted-foreground" />
       <span className="sr-only">切换右侧边栏</span>
     </Button>
   );

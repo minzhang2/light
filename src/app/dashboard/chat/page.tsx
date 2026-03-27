@@ -20,7 +20,15 @@ export default async function DashboardChatPage({
   const { session: sessionId } = await searchParams;
 
   const keys = await listManagedKeys();
-  const chatKeys = keys
+  const sortedKeys = [...keys].sort((a, b) => {
+    if (a.isPinned === b.isPinned) {
+      return 0;
+    }
+
+    return a.isPinned ? -1 : 1;
+  });
+
+  const chatKeys = sortedKeys
     .map(toChatKeyOption)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 

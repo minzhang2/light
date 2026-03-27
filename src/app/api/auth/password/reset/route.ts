@@ -6,6 +6,7 @@ import {
   setUserPasswordByEmail,
   validatePasswordInput,
 } from "@/lib/auth/password";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 
 function isValidEmail(email: string) {
@@ -45,23 +46,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: passwordMessage }, { status: 400 });
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
-  if (!existingUser) {
-    return NextResponse.json({ message: "该邮箱未注册。" }, { status: 404 });
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!existingUser) {
+      return NextResponse.json({ message: "该邮箱未注册。" }, { status: 404 });
+    }
+
+    const validCode = await consumeEmailOtp(email, body.code, "password-reset");
+    if (!validCode) {
+      return NextResponse.json(
+        { message: "验证码无效或已过期。" },
+        { status: 400 },
+      );
+    }
+
+    await setUserPasswordByEmail(email, body.password);
+
+    return NextResponse.json({ message: "密码已更新，请使用新密码登录。" });
+  } catch (error) {
+    console.error("[auth] failed to reset password", error);
+    const message = getApiErrorMessage(error, "重置密码失败，请稍后重试。");
+    return NextResponse.json({ message }, { status: 500 });
   }
-
-  const validCode = await consumeEmailOtp(email, body.code, "password-reset");
-  if (!validCode) {
-    return NextResponse.json(
-      { message: "验证码无效或已过期。" },
-      { status: 400 },
-    );
-  }
-
-  await setUserPasswordByEmail(email, body.password);
-
-  return NextResponse.json({ message: "密码已更新，请使用新密码登录。" });
 }

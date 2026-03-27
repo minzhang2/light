@@ -8,8 +8,6 @@ import {
   CopyIcon,
   DownloadIcon,
   PencilIcon,
-  EyeIcon,
-  EyeOffIcon,
   FileCode2Icon,
   FlaskConicalIcon,
   FlaskConicalOffIcon,
@@ -169,6 +167,71 @@ function StatusDot({ status }: { status: ManagedKeyListItem["lastTestStatus"] })
   return <span className={`inline-block h-2 w-2 rounded-full ${className}`} />;
 }
 
+function getSupportedProviders(message: string | null) {
+  if (!message) {
+    return [];
+  }
+
+  const normalizedMessage = normalizeProviderLabels(message);
+  const providers: Array<"anthropic" | "openai"> = [];
+
+  if (
+    /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(
+      normalizedMessage,
+    )
+  ) {
+    providers.push("anthropic");
+  }
+
+  if (
+    /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(
+      normalizedMessage,
+    )
+  ) {
+    providers.push("openai");
+  }
+
+  return providers;
+}
+
+function isClaudeFamilyModel(model: string) {
+  return /(claude|sonnet|opus|haiku|anthropic)/i.test(model);
+}
+
+function normalizeProviderLabels(message: string) {
+  const normalized = message
+    .replaceAll("Anthropic", "Claude")
+    .replaceAll("OpenAI", "Codex")
+    .replaceAll("Claude 可用（未识别出可测试模型）", "Claude 未验证（模型列表可访问，但未识别出可测试模型）")
+    .replaceAll("Codex 可用（未识别出可测试模型）", "Codex 未验证（模型列表可访问，但未识别出可测试模型）");
+
+  return normalized
+    .replace(/Claude\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
+      isClaudeFamilyModel(model)
+        ? `Claude 可用（测试模型：${model}）`
+        : `Codex 可用（测试模型：${model}）`,
+    )
+    .replace(/Codex\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
+      isClaudeFamilyModel(model)
+        ? `Claude 可用（测试模型：${model}）`
+        : `Codex 可用（测试模型：${model}）`,
+    );
+}
+
+function matchesKeyFilter(key: ManagedKeyListItem, filter: KeyFilter) {
+  if (filter === "all") {
+    return true;
+  }
+
+  const supportedProviders = getSupportedProviders(key.lastTestMessage);
+
+  if (filter === "claude") {
+    return supportedProviders.includes("anthropic");
+  }
+
+  return supportedProviders.includes("openai");
+}
+
 function TestMessage({
   message,
   status,
@@ -177,7 +240,9 @@ function TestMessage({
   status: ManagedKeyListItem["lastTestStatus"];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const isCollapsible = message.length > 120 || message.includes("\n");
+  const normalizedMessage = normalizeProviderLabels(message);
+  const isCollapsible =
+    normalizedMessage.length > 120 || normalizedMessage.includes("\n");
   const toneClassName =
     status === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -189,7 +254,9 @@ function TestMessage({
     <div className={`rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
       {expanded || !isCollapsible ? (
         <div className="flex items-start gap-2">
-          <p className="min-w-0 flex-1 break-all whitespace-pre-wrap">{message}</p>
+          <p className="min-w-0 flex-1 break-all whitespace-pre-wrap">
+            {normalizedMessage}
+          </p>
           {isCollapsible ? (
             <Button
               type="button"
@@ -205,7 +272,7 @@ function TestMessage({
         </div>
       ) : (
         <div className="flex items-center gap-1.5">
-          <p className="min-w-0 flex-1 truncate">{message}</p>
+          <p className="min-w-0 flex-1 truncate">{normalizedMessage}</p>
           <Button
             type="button"
             variant="ghost"
@@ -463,14 +530,12 @@ function AvailableModelTags({
 function ManagedKeyCard({
   item,
   effectiveModelFilter,
-  isRevealed,
   isDeleting,
   isTesting,
   isEditing,
   isSaving,
   isBatchTesting,
   editDraft,
-  onToggleReveal,
   onCopyKey,
   onCopyEnv,
   onDelete,
@@ -485,14 +550,12 @@ function ManagedKeyCard({
 }: {
   item: ManagedKeyListItem;
   effectiveModelFilter: string | null;
-  isRevealed: boolean;
   isDeleting: boolean;
   isTesting: boolean;
   isEditing: boolean;
   isSaving: boolean;
   isBatchTesting: boolean;
   editDraft: EditDraft | null;
-  onToggleReveal: () => void;
   onCopyKey: () => void;
   onCopyEnv: () => void;
   onDelete: () => void;
@@ -507,6 +570,7 @@ function ManagedKeyCard({
 }) {
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const visibleModels = getKeyAvailableModels(item);
+  const supportedProviders = getSupportedProviders(item.lastTestMessage);
   const hasExpandableContent = visibleModels.length > 0 || !!item.lastTestMessage || isEditing;
   const expanded = isEditing || detailsExpanded;
 
@@ -529,6 +593,16 @@ function ManagedKeyCard({
                   {!item.isTestable ? (
                     <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">禁</span>
                   ) : null}
+                  {supportedProviders.includes("anthropic") ? (
+                    <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                      Claude
+                    </span>
+                  ) : null}
+                  {supportedProviders.includes("openai") ? (
+                    <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                      Codex
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <span className="shrink-0 text-[11px] text-muted-foreground md:hidden">
@@ -545,23 +619,14 @@ function ManagedKeyCard({
               >
                 {item.baseUrl}
               </a>
-              <span className="truncate font-mono">
-                {isRevealed ? item.secret : item.maskedSecret}
-              </span>
+              <span className="truncate font-mono">{item.maskedSecret}</span>
               <span className="hidden shrink-0 text-right md:block md:w-20">
                 {formatDateTime(item.lastTestAt)}
               </span>
             </div>
           </div>
         </div>
-        <div className="grid w-full grid-cols-9 gap-1.5 sm:grid-cols-6 md:flex md:w-auto md:items-center md:justify-end md:gap-1">
-          <ActionIconButton
-            type="button"
-            tooltip={isRevealed ? "隐藏" : "显示"}
-            onClick={onToggleReveal}
-          >
-            {isRevealed ? <EyeOffIcon /> : <EyeIcon />}
-          </ActionIconButton>
+        <div className="grid w-full grid-cols-8 gap-1.5 sm:grid-cols-5 md:flex md:w-auto md:items-center md:justify-end md:gap-1">
           <ActionIconButton
             type="button"
             tooltip="复制 Key"
@@ -714,7 +779,6 @@ function ManagedKeyCard({
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>协议：{item.protocol}</span>
                   <span>分组：{GROUP_LABELS[item.group]}</span>
                 </div>
                 <div className="flex gap-2">
@@ -771,12 +835,12 @@ export function ManagedKeyManager({
   const [isExporting, setIsExporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showPinned, setShowPinned] = useState(true);
+  const [showNoTest, setShowNoTest] = useState(false);
   const [showAvailable, setShowAvailable] = useState(true);
   const [showOther, setShowOther] = useState(true);
   const [testingIds, setTestingIds] = useState<Record<string, boolean>>({});
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
-  const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
   const [editingIds, setEditingIds] = useState<Record<string, boolean>>({});
   const [editDrafts, setEditDrafts] = useState<Record<string, EditDraft>>({});
   const [isBatchTesting, setIsBatchTesting] = useState(false);
@@ -785,9 +849,7 @@ export function ManagedKeyManager({
 
   // Collect all available models for current group filter
   const availableModelOptions = useMemo(() => {
-    const grouped = keys.filter(
-      (key) => filter === "all" || key.group === filter,
-    );
+    const grouped = keys.filter((key) => matchesKeyFilter(key, filter));
     const modelSet = new Set<string>();
     for (const key of grouped) {
       for (const model of getKeyAvailableModels(key)) {
@@ -805,7 +867,7 @@ export function ManagedKeyManager({
 
   const filteredKeys = useMemo(() => {
     return keys.filter((key) => {
-      if (filter !== "all" && key.group !== filter) {
+      if (!matchesKeyFilter(key, filter)) {
         return false;
       }
 
@@ -838,7 +900,7 @@ export function ManagedKeyManager({
 
   const availableKeys = useMemo(() => {
     return filteredKeys
-      .filter((key) => key.lastTestStatus === "success" && !key.isPinned)
+      .filter((key) => key.isTestable && key.lastTestStatus === "success" && !key.isPinned)
       .sort(compareKeysForDisplay);
   }, [filteredKeys]);
 
@@ -848,9 +910,15 @@ export function ManagedKeyManager({
       .sort(compareKeysForDisplay);
   }, [filteredKeys]);
 
+  const noTestKeys = useMemo(() => {
+    return filteredKeys
+      .filter((key) => !key.isPinned && !key.isTestable)
+      .sort(compareKeysForDisplay);
+  }, [filteredKeys]);
+
   const otherKeys = useMemo(() => {
     return filteredKeys
-      .filter((key) => key.lastTestStatus !== "success" && !key.isPinned)
+      .filter((key) => key.isTestable && key.lastTestStatus !== "success" && !key.isPinned)
       .sort(compareKeysForDisplay);
   }, [filteredKeys]);
 
@@ -997,11 +1065,6 @@ export function ManagedKeyManager({
       }
 
       setKeys(payload.keys);
-      setRevealedIds((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
       setTestingIds((current) => {
         const next = { ...current };
         delete next[id];
@@ -1317,7 +1380,7 @@ export function ManagedKeyManager({
             >
               {item === "all"
                 ? `全部 (${keys.length})`
-                : `${GROUP_LABELS[item]} (${keys.filter((k) => k.group === item).length})`}
+                : `${GROUP_LABELS[item]} (${keys.filter((k) => matchesKeyFilter(k, item)).length})`}
             </Button>
           ))}
         </div>
@@ -1449,19 +1512,68 @@ export function ManagedKeyManager({
                       <ManagedKeyCard
                         item={key}
                         effectiveModelFilter={effectiveModelFilter}
-                        isRevealed={Boolean(revealedIds[key.id])}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
                         isSaving={Boolean(savingIds[key.id])}
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
-                        onToggleReveal={() =>
-                          setRevealedIds((current) => ({
-                            ...current,
-                            [key.id]: !current[key.id],
-                          }))
-                        }
+                        onCopyKey={() => copyToClipboard(key.secret, "Key")}
+                        onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
+                        onDelete={() => setDeleteTargetId(key.id)}
+                        onTest={() => handleTest(key.id)}
+                        onTogglePinned={() => handleTogglePinned(key)}
+                        onToggleTestable={() => handleToggleTestable(key)}
+                        onStartEdit={() => startEditing(key)}
+                        onCancelEdit={() => cancelEditing(key.id)}
+                        onChangeEditDraft={(patch) => updateEditDraft(key.id, patch)}
+                        onSaveEdit={() => handleSaveEdit(key.id)}
+                        onToggleModelFilter={setModelFilter}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {noTestKeys.length > 0 ? (
+            <section className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">禁止测试 Key</h2>
+                  <p className="text-xs text-muted-foreground">
+                    已禁止测试：{noTestKeys.length}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => setShowNoTest((current) => !current)}
+                >
+                  {showNoTest ? "收起" : "展开"}
+                  {showNoTest ? (
+                    <ChevronUpIcon className="h-4 w-4" />
+                  ) : (
+                    <ChevronDownIcon className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {showNoTest ? (
+                <div className="flex flex-col gap-1.5">
+                  {noTestKeys.map((key) => (
+                    <div key={key.id}>
+                      <ManagedKeyCard
+                        item={key}
+                        effectiveModelFilter={effectiveModelFilter}
+                        isDeleting={Boolean(deletingIds[key.id])}
+                        isTesting={Boolean(testingIds[key.id])}
+                        isEditing={Boolean(editingIds[key.id])}
+                        isSaving={Boolean(savingIds[key.id])}
+                        isBatchTesting={isBatchTesting}
+                        editDraft={editDrafts[key.id] ?? null}
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
                         onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
@@ -1512,19 +1624,12 @@ export function ManagedKeyManager({
                       <ManagedKeyCard
                         item={key}
                         effectiveModelFilter={effectiveModelFilter}
-                        isRevealed={Boolean(revealedIds[key.id])}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
                         isSaving={Boolean(savingIds[key.id])}
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
-                        onToggleReveal={() =>
-                          setRevealedIds((current) => ({
-                            ...current,
-                            [key.id]: !current[key.id],
-                          }))
-                        }
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
                         onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
@@ -1552,7 +1657,7 @@ export function ManagedKeyManager({
                     {availableKeys.length > 0 ? "不可用 / 未测试 Key" : "全部 Key"}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    包含测试失败和暂未测试的 key。
+                    包含测试失败和暂未测试的可测试 key。
                   </p>
                 </div>
                 <Button
@@ -1577,19 +1682,12 @@ export function ManagedKeyManager({
                       <ManagedKeyCard
                         item={key}
                         effectiveModelFilter={effectiveModelFilter}
-                        isRevealed={Boolean(revealedIds[key.id])}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
                         isSaving={Boolean(savingIds[key.id])}
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
-                        onToggleReveal={() =>
-                          setRevealedIds((current) => ({
-                            ...current,
-                            [key.id]: !current[key.id],
-                          }))
-                        }
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
                         onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}

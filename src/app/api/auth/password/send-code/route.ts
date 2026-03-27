@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getEmailOtpCopy, normalizeEmail } from "@/lib/auth/email-otp";
 import { OtpRateLimitError, issueEmailOtp } from "@/lib/auth/otp";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { prisma } from "@/lib/prisma";
 
 function isValidEmail(email: string) {
@@ -48,8 +49,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[auth] failed to send password reset code", error);
+    const message = getApiErrorMessage(error, "发送验证码失败，请稍后重试。");
     return NextResponse.json(
-      { message: "发送验证码失败，请稍后重试。" },
+      { message },
       { status: 500 },
     );
   }

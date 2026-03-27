@@ -4,17 +4,40 @@ import {
   listManagedUsers,
   updateManagedUserRole,
 } from "@/features/admin-users/service";
-import { requireEnvironmentAdminSession } from "@/lib/auth/admin";
+import { isEnvironmentAdminEmail } from "@/lib/auth/admin";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { getSessionOrNull } from "@/lib/auth/require-session";
 
 export async function GET() {
-  await requireEnvironmentAdminSession();
+  const session = await getSessionOrNull();
 
-  const users = await listManagedUsers();
-  return NextResponse.json({ users });
+  if (!session?.user) {
+    return NextResponse.json({ message: "请先登录。" }, { status: 401 });
+  }
+
+  if (!isEnvironmentAdminEmail(session.user.email)) {
+    return NextResponse.json({ message: "无权限访问。" }, { status: 403 });
+  }
+
+  try {
+    const users = await listManagedUsers();
+    return NextResponse.json({ users });
+  } catch (error) {
+    const message = getApiErrorMessage(error, "获取用户列表失败，请稍后重试。");
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request) {
-  const session = await requireEnvironmentAdminSession();
+  const session = await getSessionOrNull();
+
+  if (!session?.user) {
+    return NextResponse.json({ message: "请先登录。" }, { status: 401 });
+  }
+
+  if (!isEnvironmentAdminEmail(session.user.email)) {
+    return NextResponse.json({ message: "无权限访问。" }, { status: 403 });
+  }
 
   const body = (await request.json().catch(() => null)) as
     | {
@@ -43,8 +66,7 @@ export async function PATCH(request: Request) {
       user,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "角色更新失败，请稍后再试。";
+    const message = getApiErrorMessage(error, "角色更新失败，请稍后再试。");
 
     return NextResponse.json({ message }, { status: 400 });
   }

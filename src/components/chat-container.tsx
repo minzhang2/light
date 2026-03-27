@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { MenuIcon } from "lucide-react";
+import { MenuIcon, PlusIcon } from "lucide-react";
 
 import { ChatHistoryList } from "@/components/chat-history-list";
 import { ChatPlayground } from "@/components/chat-playground";
@@ -169,14 +169,23 @@ export function ChatContainer({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
         {/* Mobile top bar */}
-        <div className="flex items-center border-b border-border/70 px-4 py-2 md:hidden">
+        <div className="flex items-center border-b border-border/70 px-2 py-2 md:hidden">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
             aria-label="打开历史记录"
           >
             <MenuIcon className="h-5 w-5" />
+          </button>
+          <span className="flex-1 text-center text-sm font-medium">聊天</span>
+          <button
+            type="button"
+            onClick={() => handleSessionChange("new")}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            aria-label="新建对话"
+          >
+            <PlusIcon className="h-5 w-5" />
           </button>
         </div>
         <ChatPlayground

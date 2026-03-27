@@ -5,10 +5,16 @@ import {
   normalizeEmail,
 } from "@/lib/auth/email-otp";
 import { OtpRateLimitError, issueEmailOtp } from "@/lib/auth/otp";
-import { requireSession } from "@/lib/auth/require-session";
+import { getApiErrorMessage } from "@/lib/api-error";
+import { getSessionOrNull } from "@/lib/auth/require-session";
 
 export async function POST(request: Request) {
-  const session = await requireSession();
+  const session = await getSessionOrNull();
+
+  if (!session?.user) {
+    return NextResponse.json({ message: "请先登录。" }, { status: 401 });
+  }
+
   const sessionEmail = session.user.email;
 
   if (!sessionEmail) {
@@ -49,8 +55,9 @@ export async function POST(request: Request) {
     }
 
     console.error("[account] failed to send password change code", error);
+    const message = getApiErrorMessage(error, "发送验证码失败，请稍后重试。");
     return NextResponse.json(
-      { message: "发送验证码失败，请稍后重试。" },
+      { message },
       { status: 500 },
     );
   }

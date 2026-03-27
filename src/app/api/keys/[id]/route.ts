@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { removeManagedKey, updateManagedKey } from "@/features/managed-keys/service";
+import { getApiErrorMessage } from "@/lib/api-error";
 import type { ManagedKeyUpdateInput } from "@/features/managed-keys/types";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 
@@ -42,8 +43,7 @@ export async function PATCH(
       key,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "更新失败，请稍后再试。";
+    const message = getApiErrorMessage(error, "更新失败，请稍后再试。");
 
     return NextResponse.json({ message }, { status: 400 });
   }
@@ -60,10 +60,15 @@ export async function DELETE(
   }
 
   const { id } = await context.params;
-  const keys = await removeManagedKey(id);
+  try {
+    const keys = await removeManagedKey(id);
 
-  return NextResponse.json({
-    message: "已删除该 key。",
-    keys,
-  });
+    return NextResponse.json({
+      message: "已删除该 key。",
+      keys,
+    });
+  } catch (error) {
+    const message = getApiErrorMessage(error, "删除失败，请稍后再试。");
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }

@@ -9,6 +9,8 @@ import { useToast } from "@/components/ui/toast";
 import { compareManagedUsers } from "@/features/admin-users/sort";
 import type { ManagedUserListItem } from "@/features/admin-users/types";
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", {
     month: "2-digit",
@@ -16,6 +18,43 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatOptionalDateTime(value: string | null) {
+  if (!value) {
+    return "暂无";
+  }
+  return formatDateTime(value);
+}
+
+function getActivityBadge(lastActiveAt: string | null) {
+  if (!lastActiveAt) {
+    return {
+      label: "暂无活跃记录",
+      className: "bg-muted text-muted-foreground",
+    };
+  }
+
+  const diff = Math.max(0, Date.now() - new Date(lastActiveAt).getTime());
+
+  if (diff <= DAY_IN_MS) {
+    return {
+      label: "24 小时内活跃",
+      className: "bg-emerald-500/10 text-emerald-600",
+    };
+  }
+
+  if (diff <= DAY_IN_MS * 7) {
+    return {
+      label: "7 天内活跃",
+      className: "bg-amber-500/10 text-amber-700",
+    };
+  }
+
+  return {
+    label: "超过 7 天未活跃",
+    className: "bg-muted text-muted-foreground",
+  };
 }
 
 export function AdminUserManager({
@@ -31,8 +70,28 @@ export function AdminUserManager({
   const { toast } = useToast();
 
   const stats = useMemo(() => {
+    const now = Date.now();
     const adminCount = users.filter((user) => user.role === "admin").length;
-    return { total: users.length, admins: adminCount, users: users.length - adminCount };
+    const activeIn24Hours = users.filter((user) => {
+      if (!user.activity.lastActiveAt) {
+        return false;
+      }
+      return now - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS;
+    }).length;
+    const activeIn7Days = users.filter((user) => {
+      if (!user.activity.lastActiveAt) {
+        return false;
+      }
+      return now - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS * 7;
+    }).length;
+
+    return {
+      total: users.length,
+      admins: adminCount,
+      users: users.length - adminCount,
+      activeIn24Hours,
+      activeIn7Days,
+    };
   }, [users]);
 
   async function handleRoleUpdate(email: string, role: "admin" | "user") {
@@ -87,7 +146,8 @@ export function AdminUserManager({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        共 {stats.total} 人，{stats.admins} 个管理员，{stats.users} 个普通用户
+        共 {stats.total} 人，{stats.admins} 个管理员，{stats.users} 个普通用户，近 24 小时活跃{" "}
+        {stats.activeIn24Hours} 人，近 7 天活跃 {stats.activeIn7Days} 人
       </p>
 
       {users.length === 0 ? (
@@ -100,9 +160,10 @@ export function AdminUserManager({
             const isCurrentUser = user.email === currentAdminEmail.toLowerCase();
             const isEnvAdmin = user.roleSource === "environment";
             const isUpdating = updatingUserEmail === user.email;
+            const activityBadge = getActivityBadge(user.activity.lastActiveAt);
 
             return (
-              <div key={user.id} className="flex items-center gap-3 px-4 py-3">
+              <div key={user.id} className="flex items-start gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold">
@@ -126,8 +187,21 @@ export function AdminUserManager({
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className={`rounded-full px-2 py-0.5 ${activityBadge.className}`}>
+                      {activityBadge.label}
+                    </span>
+                    <span>最近活跃：{formatOptionalDateTime(user.activity.lastActiveAt)}</span>
+                    <span>
+                      聊天：{user.activity.chatSessionCount} 会话 / {user.activity.chatMessageCount} 条消息
+                    </span>
+                    <span>临时邮箱：{user.activity.mailboxCount} 个</span>
+                    {user.activity.lastMailboxAt ? (
+                      <span>最近邮箱操作：{formatDateTime(user.activity.lastMailboxAt)}</span>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
                   {user.role !== "admin" && (
                     <Button
                       type="button"
