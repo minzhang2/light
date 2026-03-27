@@ -36,6 +36,7 @@ import {
   SignOutDropdownMenuItem,
   SignOutSidebarMenuItem,
 } from "@/components/auth/sign-out-button"
+import { useDashboardMobileAside } from "@/components/dashboard-mobile-aside"
 
 export function NavUser({
   user,
@@ -149,7 +150,15 @@ export function NavUserPanel({
   }
 }) {
   const router = useRouter()
+  const { isMobile, setOpenMobile } = useDashboardMobileAside()
   const avatarFallback = user.name.slice(0, 1).toUpperCase()
+
+  function handleNavigate(href: string) {
+    router.push(href)
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   return (
     <div>
@@ -168,20 +177,20 @@ export function NavUserPanel({
 
       <SidebarMenu className="px-2 py-2">
         <SidebarMenuItem>
-          <SidebarMenuButton onClick={() => router.push("/dashboard/account")} size="lg">
+          <SidebarMenuButton onClick={() => handleNavigate("/dashboard/account")} size="lg">
             <UserRoundIcon />
             <span>个人中心</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
-          <SidebarMenuButton onClick={() => router.push("/dashboard/account/password")} size="lg">
+          <SidebarMenuButton onClick={() => handleNavigate("/dashboard/account/password")} size="lg">
             <KeyRoundIcon />
             <span>修改密码</span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         {user.canAccessAdminConsole ? (
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => router.push("/dashboard/admin")} size="lg">
+            <SidebarMenuButton onClick={() => handleNavigate("/dashboard/admin")} size="lg">
               <ShieldCheckIcon />
               <span>管理后台</span>
             </SidebarMenuButton>
@@ -189,7 +198,7 @@ export function NavUserPanel({
         ) : null}
         {user.canAccessInvites ? (
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => router.push("/dashboard/invites")} size="lg">
+            <SidebarMenuButton onClick={() => handleNavigate("/dashboard/invites")} size="lg">
               <BadgePlusIcon />
               <span>邀请码</span>
             </SidebarMenuButton>
@@ -206,7 +215,13 @@ export function NavUserPanel({
       <SidebarSeparator className="mx-0" />
 
       <SidebarMenu className="px-2 py-2">
-        <SignOutSidebarMenuItem />
+        <SignOutSidebarMenuItem
+          onClick={() => {
+            if (isMobile) {
+              setOpenMobile(false)
+            }
+          }}
+        />
       </SidebarMenu>
     </div>
   )

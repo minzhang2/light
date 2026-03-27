@@ -4,6 +4,7 @@ import { ChatContainer } from "@/components/chat-container";
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { listManagedKeys } from "@/features/managed-keys/service";
 import { getChatSession, toChatKeyOption } from "@/features/chat/service";
+import { compareManagedKeysForDisplay } from "@/features/managed-keys/utils";
 import { requireSession } from "@/lib/auth/require-session";
 
 export const metadata: Metadata = {
@@ -20,13 +21,7 @@ export default async function DashboardChatPage({
   const { session: sessionId } = await searchParams;
 
   const keys = await listManagedKeys();
-  const sortedKeys = [...keys].sort((a, b) => {
-    if (a.isPinned === b.isPinned) {
-      return 0;
-    }
-
-    return a.isPinned ? -1 : 1;
-  });
+  const sortedKeys = [...keys].sort(compareManagedKeysForDisplay);
 
   const chatKeys = sortedKeys
     .map(toChatKeyOption)

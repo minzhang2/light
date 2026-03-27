@@ -6,6 +6,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 
 export function NavMain({
@@ -21,20 +22,29 @@ export function NavMain({
     }[]
   }[]
 }) {
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  function handleItemClick() {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
+
   return (
-    <div className="space-y-7">
+    <div className="space-y-4">
       {sections.map((section) => (
         <section key={section.title}>
-          <h3 className="px-2 text-xs font-semibold tracking-wide text-sidebar-foreground/55">
+          <h3 className="px-3 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/40">
             {section.title}
           </h3>
-          <SidebarMenu className="mt-2 gap-1.5">
+          <SidebarMenu className="mt-1.5 gap-0.5">
             {section.items.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
-                  className="h-10 rounded-2xl px-3 text-sm font-medium text-sidebar-foreground/95 [&_svg]:size-4 [&_svg]:text-sidebar-foreground/65 data-[active=true]:bg-sidebar-accent/90"
+                  className="h-9 rounded-lg px-3 text-[13px] font-medium text-sidebar-foreground/70 transition-colors hover:text-sidebar-foreground [&_svg]:size-4 [&_svg]:text-sidebar-foreground/50 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-foreground [&[data-active=true]_svg]:text-sidebar-foreground/80"
                   isActive={item.isActive}
                   render={<Link href={item.url} />}
+                  onClick={handleItemClick}
                   size="default"
                 >
                   {item.icon}

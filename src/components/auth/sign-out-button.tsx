@@ -61,7 +61,11 @@ export function SignOutDropdownMenuItem({
   );
 }
 
-export function SignOutSidebarMenuItem() {
+export function SignOutSidebarMenuItem({
+  onClick,
+}: {
+  onClick?: () => void;
+} = {}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -72,7 +76,10 @@ export function SignOutSidebarMenuItem() {
             "text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive/20 active:bg-destructive/10 active:text-destructive",
             "[&_svg]:text-destructive",
           )}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            onClick?.();
+            setOpen(true);
+          }}
           size="lg"
         >
           <LogOutIcon />

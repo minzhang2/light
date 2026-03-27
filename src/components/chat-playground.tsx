@@ -788,8 +788,8 @@ export function ChatPlayground({
               placeholder="输入消息，Enter 发送，Shift + Enter 换行"
               className="min-h-16 resize-none border-0 bg-transparent px-5 pt-4 pb-2 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
             />
-            <div className="flex items-center gap-1.5 px-4 pb-2">
-              <div className="shrink-0">
+            <div className="flex items-center gap-1.5 overflow-hidden px-4 pb-2">
+              <div className="min-w-0 shrink">
                 <Select
                   value={selectedKeyId ?? undefined}
                   onValueChange={(value) => {
@@ -808,11 +808,11 @@ export function ChatPlayground({
                     <span className="inline-flex min-w-0 items-center gap-1">
                       {selectedKey ? (
                         <>
-                          <span className="max-w-24 truncate md:max-w-40">{selectedKey.name}</span>
-                          <KeySupportBadges keyOption={selectedKey} />
+                          <span className="max-w-[72px] truncate md:max-w-40">{selectedKey.name}</span>
+                          <KeySupportBadges keyOption={selectedKey} className="hidden md:inline-flex" />
                         </>
                       ) : (
-                        <span className="max-w-24 truncate md:max-w-40">选择 Key</span>
+                        <span className="max-w-[72px] truncate md:max-w-40">选择 Key</span>
                       )}
                     </span>
                   </SelectTrigger>
@@ -828,7 +828,7 @@ export function ChatPlayground({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="shrink-0">
+              <div className="min-w-0 shrink">
                 <Select
                   value={selectedModel || undefined}
                   onValueChange={(value) => {
@@ -842,7 +842,7 @@ export function ChatPlayground({
                     id="chat-model"
                     className="h-8 w-auto min-w-0 gap-1 rounded-full border-0 bg-transparent px-2 text-xs font-medium text-muted-foreground shadow-none hover:text-foreground focus-visible:border-transparent focus-visible:ring-0 data-[popup-open=true]:border-transparent data-[popup-open=true]:ring-0"
                   >
-                    <span className="max-w-24 truncate md:max-w-48">{selectedModel || "选择模型"}</span>
+                    <span className="max-w-[72px] truncate md:max-w-48">{selectedModel || "选择模型"}</span>
                   </SelectTrigger>
                   <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[calc(100vw-2rem)]">
                     {(selectedKey?.models ?? []).map((item) => (
@@ -853,7 +853,7 @@ export function ChatPlayground({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="ml-auto flex items-center">
+              <div className="ml-auto flex shrink-0 items-center">
                 <Button
                   type="button"
                   onClick={isSending ? handleCancelSend : handleSend}

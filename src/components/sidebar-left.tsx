@@ -65,10 +65,10 @@ export function SidebarLeft({
 
   return (
     <Sidebar className="border-r-0" {...props}>
-      <SidebarHeader className="px-4 pt-6 pb-2">
+      <SidebarHeader className="px-4 pt-4 pb-0">
         <TeamSwitcher name="light" />
       </SidebarHeader>
-      <SidebarContent className="px-4 pb-4">
+      <SidebarContent className="px-4 pt-6 pb-4">
         <NavMain sections={navMainSections} />
         <NavSecondary
           items={navSecondary.map((item) => ({

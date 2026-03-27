@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  InboxIcon,
   Loader2Icon,
   MenuIcon,
   PlusIcon,
@@ -82,59 +81,48 @@ function MailboxSidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border/70 px-4 py-4">
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">选择用户</p>
-            <div className="flex items-center gap-2">
-              <Select
-                value={token}
-                onValueChange={(value) => {
-                  if (value) {
-                    onTokenChange(value);
-                  }
-                }}
-              >
-                <SelectTrigger className="min-w-0 flex-1">
-                  <span className="truncate">{selectedTokenLabel}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {TOKENS.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <div className="border-b border-border/70 px-3 py-3">
+        <div className="flex items-center gap-2">
+          <Select
+            value={token}
+            onValueChange={(value) => {
+              if (value) {
+                onTokenChange(value);
+              }
+            }}
+          >
+            <SelectTrigger className="min-w-0 flex-1">
+              <span className="truncate">{selectedTokenLabel}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {TOKENS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Button
-                variant="outline"
-                className="shrink-0 gap-2"
-                onClick={onAllocateMailbox}
-                disabled={isAllocating}
-              >
-                {isAllocating ? (
-                  <Loader2Icon className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PlusIcon className="h-4 w-4" />
-                )}
-                生成邮箱
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-sm font-medium">邮箱列表</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              选择一个邮箱查看最近收件记录。
-            </p>
-          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0"
+            onClick={onAllocateMailbox}
+            disabled={isAllocating}
+            title="生成邮箱"
+          >
+            {isAllocating ? (
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlusIcon className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
+      <div className="flex-1 overflow-y-auto px-2 py-1">
         {mailboxes.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            暂无已分配邮箱
+            暂无邮箱
           </p>
         ) : (
           mailboxes.map((mailbox) => {
@@ -145,48 +133,33 @@ function MailboxSidebar({
               <div
                 key={mailbox.id}
                 className={cn(
-                  "my-2 flex items-start gap-2 rounded-xl border p-2.5 transition-colors",
+                  "my-0.5 flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors",
                   isActive
-                    ? "border-border bg-accent/60"
-                    : "border-transparent hover:border-border/70 hover:bg-accent/30",
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/50",
                 )}
               >
                 <button
                   type="button"
                   onClick={() => onSelectMailbox(mailbox)}
-                  className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                  className="min-w-0 flex-1 truncate text-left text-sm"
                 >
-                  <span
-                    className={cn(
-                      "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border",
-                      isActive
-                        ? "border-border bg-background text-foreground"
-                        : "border-border/70 bg-muted/40 text-muted-foreground",
-                    )}
-                  >
-                    <InboxIcon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">
-                      {mailbox.email}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">ID {mailbox.id}</span>
-                  </span>
+                  {mailbox.email}
                 </button>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-8 shrink-0"
+                  className="size-7 shrink-0"
                   aria-label={`查询 ${mailbox.email} 的邮件`}
                   title="查询邮件"
                   onClick={() => onFetchEmails(mailbox)}
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <Loader2Icon className="size-4 animate-spin" />
+                    <Loader2Icon className="size-3.5 animate-spin" />
                   ) : (
-                    <SearchIcon className="size-4" />
+                    <SearchIcon className="size-3.5" />
                   )}
                 </Button>
               </div>
@@ -671,35 +644,22 @@ export function MailContainer() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col px-5 py-5 md:px-8 md:py-8">
-            <section className="flex min-h-full flex-1 flex-col">
-              <div className="sticky top-0 z-10 flex items-start justify-between bg-muted/[0.18] px-2 py-3 backdrop-blur">
-                <div>
-                  <h3 className="text-base font-semibold tracking-tight">操作日志</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-0.5 text-xs text-muted-foreground"
-                  onClick={() => setLogs([])}
-                >
-                  清空
-                </Button>
-              </div>
-
+        <div className="flex flex-1 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col">
+            <section className="flex flex-1 flex-col">
               <div
                 ref={logRef}
-                className="flex-1 overflow-y-auto px-2 pb-6 pt-4"
+                className="relative flex-1 overflow-y-auto"
               >
                 {logs.length === 0 ? (
-                  <div className="flex min-h-[18rem] items-center justify-center rounded-3xl bg-background/55 px-6 py-10">
-                    <p className="max-w-md text-center text-sm leading-7 text-muted-foreground">
-                      暂无日志，生成邮箱或执行查询后会在这里显示结果。
+                  <div className="flex h-full items-center justify-center px-6">
+                    <p className="text-sm text-muted-foreground">
+                      生成邮箱或查询邮件后，结果将显示在这里
                     </p>
                   </div>
                 ) : (
-                  <div className="rounded-3xl bg-background/70 px-5 py-5 font-mono text-xs leading-7 shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+                  <>
+                    <div className="px-5 py-5 font-mono text-xs leading-7">
                     {logs.map((log, index) => (
                       <div
                         key={`${log.time}-${index}`}
@@ -720,8 +680,28 @@ export function MailContainer() {
                       </div>
                     ))}
                   </div>
+                  <div className="sticky bottom-0 hidden justify-end px-3 pb-3 md:flex">
+                    <button
+                      type="button"
+                      className="flex h-7 items-center rounded-full border bg-background px-3 text-xs text-muted-foreground shadow-sm transition hover:text-foreground"
+                      onClick={() => setLogs([])}
+                    >
+                      清空
+                    </button>
+                  </div>
+                  </>
                 )}
               </div>
+
+              {logs.length > 0 && (
+                <button
+                  type="button"
+                  className="fixed bottom-4 right-4 z-30 flex h-8 items-center gap-1.5 rounded-full border bg-background px-3 text-xs text-muted-foreground shadow-sm transition hover:text-foreground md:hidden"
+                  onClick={() => setLogs([])}
+                >
+                  清空
+                </button>
+              )}
             </section>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -13,14 +13,11 @@ import {
   FlaskConicalOffIcon,
   PinIcon,
   PinOffIcon,
-  SearchIcon,
   Trash2Icon,
-  XIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -47,6 +44,7 @@ import type {
   ManagedKeyTestResult,
   ManagedKeyUpdateInput,
 } from "@/features/managed-keys/types";
+import { compareManagedKeysForDisplay } from "@/features/managed-keys/utils";
 
 type KeyFilter = "all" | "claude" | "codex";
 
@@ -106,14 +104,6 @@ function mergeAvailableModels(
   }
 
   return [...merged];
-}
-
-function compareKeysForDisplay(a: ManagedKeyListItem, b: ManagedKeyListItem) {
-  if (a.isPinned !== b.isPinned) {
-    return a.isPinned ? -1 : 1;
-  }
-
-  return 0;
 }
 
 function formatDateTime(value: string | null) {
@@ -289,137 +279,10 @@ function TestMessage({
   );
 }
 
-function SearchableModelFilter({
-  models,
-  value,
-  onChange,
-  placeholder,
-  emptyLabel,
-  className,
-  compact = false,
-}: {
-  models: string[];
-  value: string | null;
-  onChange: (value: string | null) => void;
-  placeholder: string;
-  emptyLabel?: string;
-  className?: string;
-  compact?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-
-  const filteredModels = useMemo(() => {
-    if (!normalizedQuery) {
-      return models;
-    }
-
-    return models.filter((model) =>
-      model.toLowerCase().includes(normalizedQuery),
-    );
-  }, [models, normalizedQuery]);
-
-  const triggerLabel = value ?? placeholder;
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) {
-          setQuery("");
-        }
-      }}
-    >
-      <PopoverTrigger
-        render={
-          <Button
-            type="button"
-            variant="outline"
-            size={compact ? "sm" : "default"}
-            className={className}
-          />
-        }
-      >
-        <span className="min-w-0 truncate text-left">{triggerLabel}</span>
-        <ChevronDownIcon className="ml-auto h-4 w-4 text-muted-foreground" />
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={8}
-        className="w-[min(360px,calc(100vw-2rem))] gap-2 p-2"
-      >
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索模型..."
-            className="pl-9"
-          />
-        </div>
-        {value ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="justify-start"
-            onClick={() => {
-              onChange(null);
-              setOpen(false);
-            }}
-          >
-            <XIcon className="h-3.5 w-3.5" />
-            清除筛选
-          </Button>
-        ) : null}
-        <div className="max-h-64 overflow-y-auto">
-          {filteredModels.length > 0 ? (
-            <div className="space-y-1">
-              {filteredModels.map((model) => {
-                const active = value === model;
-
-                return (
-                  <button
-                    key={model}
-                    type="button"
-                    onClick={() => {
-                      onChange(active ? null : model);
-                      setOpen(false);
-                    }}
-                    className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
-                      active
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-muted"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 break-all">{model}</span>
-                    {active ? <CheckIcon className="h-4 w-4 shrink-0" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="px-2 py-3 text-sm text-muted-foreground">
-              {emptyLabel ?? "没有匹配的模型。"}
-            </div>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function AvailableModelTags({
   models,
-  effectiveModelFilter,
-  onToggleModelFilter,
 }: {
   models: string[];
-  effectiveModelFilter: string | null;
-  onToggleModelFilter: (model: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [collapsedHeight, setCollapsedHeight] = useState(0);
@@ -479,22 +342,12 @@ function AvailableModelTags({
       >
         <div ref={contentRef} className="flex flex-wrap gap-1.5">
           {models.map((model) => (
-            <button
+            <span
               key={model}
-              type="button"
-              onClick={() =>
-                onToggleModelFilter(
-                  effectiveModelFilter === model ? null : model,
-                )
-              }
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
-                effectiveModelFilter === model
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-              }`}
+              className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700"
             >
               {model}
-            </button>
+            </span>
           ))}
         </div>
         {isCollapsible ? (
@@ -529,7 +382,6 @@ function AvailableModelTags({
 
 function ManagedKeyCard({
   item,
-  effectiveModelFilter,
   isDeleting,
   isTesting,
   isEditing,
@@ -546,10 +398,8 @@ function ManagedKeyCard({
   onCancelEdit,
   onChangeEditDraft,
   onSaveEdit,
-  onToggleModelFilter,
 }: {
   item: ManagedKeyListItem;
-  effectiveModelFilter: string | null;
   isDeleting: boolean;
   isTesting: boolean;
   isEditing: boolean;
@@ -566,7 +416,6 @@ function ManagedKeyCard({
   onCancelEdit: () => void;
   onChangeEditDraft: (patch: Partial<EditDraft>) => void;
   onSaveEdit: () => void;
-  onToggleModelFilter: (model: string | null) => void;
 }) {
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const visibleModels = getKeyAvailableModels(item);
@@ -799,15 +648,7 @@ function ManagedKeyCard({
           {!isEditing && visibleModels.length > 0 ? (
             <div>
               <p className="mb-1.5 text-xs font-medium text-foreground/60">可用模型</p>
-              <AvailableModelTags
-                models={visibleModels}
-                effectiveModelFilter={
-                  effectiveModelFilter && visibleModels.includes(effectiveModelFilter)
-                    ? effectiveModelFilter
-                    : null
-                }
-                onToggleModelFilter={onToggleModelFilter}
-              />
+              <AvailableModelTags models={visibleModels} />
             </div>
           ) : null}
 
@@ -828,8 +669,7 @@ export function ManagedKeyManager({
   const { toast, dismiss } = useToast();
   const [keys, setKeys] = useState(initialKeys);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<KeyFilter>("claude");
-  const [modelFilter, setModelFilter] = useState<string | null>(null);
+  const [filter, setFilter] = useState<KeyFilter>("all");
   const [rawImport, setRawImport] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -847,31 +687,9 @@ export function ManagedKeyManager({
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const hasTestingKeys = Object.keys(testingIds).length > 0;
 
-  // Collect all available models for current group filter
-  const availableModelOptions = useMemo(() => {
-    const grouped = keys.filter((key) => matchesKeyFilter(key, filter));
-    const modelSet = new Set<string>();
-    for (const key of grouped) {
-      for (const model of getKeyAvailableModels(key)) {
-        modelSet.add(model);
-      }
-    }
-    return [...modelSet].sort();
-  }, [keys, filter]);
-
-  // Reset model filter when it's no longer valid
-  const effectiveModelFilter =
-    modelFilter && availableModelOptions.includes(modelFilter)
-      ? modelFilter
-      : null;
-
   const filteredKeys = useMemo(() => {
     return keys.filter((key) => {
       if (!matchesKeyFilter(key, filter)) {
-        return false;
-      }
-
-      if (effectiveModelFilter && !getKeyAvailableModels(key).includes(effectiveModelFilter)) {
         return false;
       }
 
@@ -892,7 +710,7 @@ export function ManagedKeyManager({
 
       return haystack.includes(query.trim().toLowerCase());
     });
-  }, [effectiveModelFilter, filter, keys, query]);
+  }, [filter, keys, query]);
 
   const testableFilteredKeys = useMemo(() => {
     return filteredKeys.filter((key) => key.isTestable);
@@ -901,25 +719,25 @@ export function ManagedKeyManager({
   const availableKeys = useMemo(() => {
     return filteredKeys
       .filter((key) => key.isTestable && key.lastTestStatus === "success" && !key.isPinned)
-      .sort(compareKeysForDisplay);
+      .sort(compareManagedKeysForDisplay);
   }, [filteredKeys]);
 
   const pinnedKeys = useMemo(() => {
     return filteredKeys
       .filter((key) => key.isPinned)
-      .sort(compareKeysForDisplay);
+      .sort(compareManagedKeysForDisplay);
   }, [filteredKeys]);
 
   const noTestKeys = useMemo(() => {
     return filteredKeys
       .filter((key) => !key.isPinned && !key.isTestable)
-      .sort(compareKeysForDisplay);
+      .sort(compareManagedKeysForDisplay);
   }, [filteredKeys]);
 
   const otherKeys = useMemo(() => {
     return filteredKeys
       .filter((key) => key.isTestable && key.lastTestStatus !== "success" && !key.isPinned)
-      .sort(compareKeysForDisplay);
+      .sort(compareManagedKeysForDisplay);
   }, [filteredKeys]);
 
   const deleteTarget = useMemo(
@@ -1364,94 +1182,55 @@ export function ManagedKeyManager({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="搜索名称、域名、模型..."
-          className="h-10 md:max-w-xs"
+          className="h-8 md:max-w-[200px]"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(["all", "claude", "codex"] as const).map((item) => (
             <Button
               key={item}
               type="button"
               variant={filter === item ? "default" : "outline"}
               size="sm"
-              onClick={() => {
-                setFilter(item);
-                setModelFilter(null);
-              }}
+              onClick={() => setFilter(item)}
             >
               {item === "all"
                 ? `全部 (${keys.length})`
                 : `${GROUP_LABELS[item]} (${keys.filter((k) => matchesKeyFilter(k, item)).length})`}
             </Button>
           ))}
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleBatchTest}
-          disabled={testableFilteredKeys.length === 0 || isBatchTesting || hasTestingKeys}
-        >
-          <FlaskConicalIcon className="h-4 w-4" />
-          {isBatchTesting ? "批量测试中..." : `一键测试 (${testableFilteredKeys.length})`}
-        </Button>
-        <div className="ml-auto flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportAll}
-            disabled={keys.length === 0 || isExporting}
-          >
-            <DownloadIcon className="h-4 w-4" />
-            {isExporting ? "导出中..." : `全部导出 (${keys.length})`}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowImport(!showImport)}
-          >
-            批量导入
-            {showImport ? <ChevronUpIcon className="ml-1 h-4 w-4" /> : <ChevronDownIcon className="ml-1 h-4 w-4" />}
-          </Button>
-        </div>
-      </div>
-
-      {/* Model sub-filter */}
-      {availableModelOptions.length > 0 ? (
-        <div className="rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-foreground">模型筛选</p>
-              <p className="text-xs text-muted-foreground">
-                搜索并筛选当前列表中的可用模型
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <SearchableModelFilter
-                models={availableModelOptions}
-                value={effectiveModelFilter}
-                onChange={setModelFilter}
-                placeholder={`选择模型 (${availableModelOptions.length})`}
-                emptyLabel="没有匹配的模型筛选项。"
-                className="min-w-56 justify-start"
-              />
-              {effectiveModelFilter ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 px-3 text-xs"
-                  onClick={() => setModelFilter(null)}
-                >
-                  <XIcon className="h-3.5 w-3.5" />
-                  清除筛选
-                </Button>
-              ) : null}
-            </div>
+          <div className="ml-auto flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleBatchTest}
+              disabled={testableFilteredKeys.length === 0 || isBatchTesting || hasTestingKeys}
+            >
+              <FlaskConicalIcon className="h-4 w-4" />
+              {isBatchTesting ? "测试中..." : `测试 (${testableFilteredKeys.length})`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportAll}
+              disabled={keys.length === 0 || isExporting}
+            >
+              <DownloadIcon className="h-4 w-4" />
+              {isExporting ? "导出中..." : `导出 (${keys.length})`}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowImport(!showImport)}
+            >
+              导入
+              {showImport ? <ChevronUpIcon className="ml-1 h-4 w-4" /> : <ChevronDownIcon className="ml-1 h-4 w-4" />}
+            </Button>
           </div>
         </div>
-      ) : null}
+      </div>
 
       {/* Collapsible import */}
       {showImport ? (
@@ -1511,7 +1290,6 @@ export function ManagedKeyManager({
                     <div key={key.id}>
                       <ManagedKeyCard
                         item={key}
-                        effectiveModelFilter={effectiveModelFilter}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
@@ -1528,7 +1306,6 @@ export function ManagedKeyManager({
                         onCancelEdit={() => cancelEditing(key.id)}
                         onChangeEditDraft={(patch) => updateEditDraft(key.id, patch)}
                         onSaveEdit={() => handleSaveEdit(key.id)}
-                        onToggleModelFilter={setModelFilter}
                       />
                     </div>
                   ))}
@@ -1567,7 +1344,6 @@ export function ManagedKeyManager({
                     <div key={key.id}>
                       <ManagedKeyCard
                         item={key}
-                        effectiveModelFilter={effectiveModelFilter}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
@@ -1584,7 +1360,6 @@ export function ManagedKeyManager({
                         onCancelEdit={() => cancelEditing(key.id)}
                         onChangeEditDraft={(patch) => updateEditDraft(key.id, patch)}
                         onSaveEdit={() => handleSaveEdit(key.id)}
-                        onToggleModelFilter={setModelFilter}
                       />
                     </div>
                   ))}
@@ -1623,7 +1398,6 @@ export function ManagedKeyManager({
                     <div key={key.id}>
                       <ManagedKeyCard
                         item={key}
-                        effectiveModelFilter={effectiveModelFilter}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
@@ -1640,7 +1414,6 @@ export function ManagedKeyManager({
                         onCancelEdit={() => cancelEditing(key.id)}
                         onChangeEditDraft={(patch) => updateEditDraft(key.id, patch)}
                         onSaveEdit={() => handleSaveEdit(key.id)}
-                        onToggleModelFilter={setModelFilter}
                       />
                     </div>
                   ))}
@@ -1681,7 +1454,6 @@ export function ManagedKeyManager({
                     <div key={key.id}>
                       <ManagedKeyCard
                         item={key}
-                        effectiveModelFilter={effectiveModelFilter}
                         isDeleting={Boolean(deletingIds[key.id])}
                         isTesting={Boolean(testingIds[key.id])}
                         isEditing={Boolean(editingIds[key.id])}
@@ -1698,7 +1470,6 @@ export function ManagedKeyManager({
                         onCancelEdit={() => cancelEditing(key.id)}
                         onChangeEditDraft={(patch) => updateEditDraft(key.id, patch)}
                         onSaveEdit={() => handleSaveEdit(key.id)}
-                        onToggleModelFilter={setModelFilter}
                       />
                     </div>
                   ))}
