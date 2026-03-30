@@ -199,6 +199,7 @@ export function AdminUserManager({
                     {user.activity.lastMailboxAt ? (
                       <span>最近邮箱操作：{formatDateTime(user.activity.lastMailboxAt)}</span>
                     ) : null}
+                    <span>最近登录：{formatOptionalDateTime(user.lastLoginAt ?? null)}</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 pt-0.5">

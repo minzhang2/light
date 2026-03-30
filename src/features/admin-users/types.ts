@@ -14,6 +14,7 @@ export type ManagedUserListItem = {
   role: "user" | "admin";
   roleSource: "database" | "environment";
   createdAt: string;
+  lastLoginAt: string | null;
   activity: ManagedUserActivitySummary;
 };
 

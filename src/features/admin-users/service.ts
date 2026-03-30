@@ -113,6 +113,8 @@ function toListItem(
     email: string | null;
     role: string;
     createdAt: Date;
+    lastLoginAt: Date | null;
+    lastActiveAt: Date | null;
   },
   envAdmins: Set<string>,
   activity: ManagedUserActivitySummary,
@@ -124,6 +126,9 @@ function toListItem(
   const email = normalizeEmail(user.email);
   const isEnvAdmin = envAdmins.has(email);
 
+  const lastLoginAtIso = user.lastLoginAt ? user.lastLoginAt.toISOString() : null;
+  const lastActiveAtIso = user.lastActiveAt ? user.lastActiveAt.toISOString() : null;
+
   return {
     id: user.id,
     name: user.name,
@@ -131,7 +136,14 @@ function toListItem(
     role: isEnvAdmin || user.role === "admin" ? "admin" : "user",
     roleSource: isEnvAdmin ? "environment" : "database",
     createdAt: user.createdAt.toISOString(),
-    activity,
+    lastLoginAt: lastLoginAtIso,
+    activity: {
+      ...activity,
+      lastActiveAt: pickLatestIso(
+        pickLatestIso(activity.lastActiveAt, lastLoginAtIso),
+        lastActiveAtIso,
+      ),
+    },
   };
 }
 
@@ -144,6 +156,8 @@ export async function listManagedUsers() {
       email: true,
       role: true,
       createdAt: true,
+      lastLoginAt: true,
+      lastActiveAt: true,
     },
   });
 
@@ -203,6 +217,8 @@ export async function updateManagedUserRole({
       email: true,
       role: true,
       createdAt: true,
+      lastLoginAt: true,
+      lastActiveAt: true,
     },
   });
 

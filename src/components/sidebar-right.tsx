@@ -22,7 +22,7 @@ const RIGHT_SIDEBAR_WIDTH_MOBILE = "min(24rem, calc(100vw - 1rem))"
 
 function SidebarCalendarSection() {
   return (
-    <div className="border-t border-sidebar-border/80 px-3 py-3">
+    <div className="px-3 py-3">
       <ChineseDatePicker />
     </div>
   )

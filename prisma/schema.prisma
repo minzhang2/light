@@ -17,8 +17,10 @@ model User {
   accounts      Account[]
   sessions      Session[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+  lastActiveAt  DateTime?
 
   @@index([role])
 }
@@ -138,9 +140,11 @@ model TempMailbox {
   id                     Int      @id
   email                  String
   userId                 String
+  accountKey             String?
+  mailboxType            String   @default("system")
   remainingRequestsToday Int      @default(0)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  @@index([userId, createdAt])
+  @@index([userId, accountKey, createdAt])
 }

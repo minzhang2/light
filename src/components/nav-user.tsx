@@ -65,7 +65,7 @@ export function NavUser({
           >
             <Avatar>
               <AvatarImage src={user.avatar} alt={user.name} />
-              <AvatarFallback>{avatarFallback}</AvatarFallback>
+              <AvatarFallback className="bg-black text-white">{avatarFallback}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
@@ -84,7 +84,7 @@ export function NavUser({
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar>
                     <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback>{avatarFallback}</AvatarFallback>
+                    <AvatarFallback className="bg-black text-white">{avatarFallback}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{user.name}</span>
@@ -165,7 +165,7 @@ export function NavUserPanel({
       <div className="flex items-center gap-3 px-3 py-3">
         <Avatar>
           <AvatarImage src={user.avatar} alt={user.name} />
-          <AvatarFallback>{avatarFallback}</AvatarFallback>
+          <AvatarFallback className="bg-black text-white">{avatarFallback}</AvatarFallback>
         </Avatar>
         <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
           <span className="truncate font-medium">{user.name}</span>
@@ -223,6 +223,8 @@ export function NavUserPanel({
           }}
         />
       </SidebarMenu>
+
+      <SidebarSeparator className="mx-0" />
     </div>
   )
 }
