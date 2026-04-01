@@ -164,6 +164,7 @@ function parseMessageContent(content: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => line.replace(/^-\s*/, "").trim())
+    .map((line) => line.replace(/\s+\([^)\/]+\/[^)]+\)\s*$/i, "").trim())
     .filter(Boolean);
 
   return {
