@@ -19,6 +19,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -1287,7 +1288,7 @@ export function ManagedKeyManager({
       {/* Collapsible import */}
       {showImport ? (
         <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
-          <textarea
+          <Textarea
             value={rawImport}
             onChange={(event) => setRawImport(event.target.value)}
             placeholder="粘贴 export ... 文本，系统自动去重归类"
