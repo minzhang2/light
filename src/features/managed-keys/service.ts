@@ -310,10 +310,44 @@ function sortModelsByGroupPriority(
   return [...models].sort((left, right) => getPriority(left) - getPriority(right));
 }
 
+function matchesModelGroup(model: string, group: ManagedKeyListItem["group"]) {
+  return group === "claude" ? isClaudeFamilyModel(model) : !isClaudeFamilyModel(model);
+}
+
+function normalizeModelAlias(model: string) {
+  return model
+    .trim()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9.]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 type TestCandidate = {
   model: string;
   source: "preferred" | "fallback";
 };
+
+function getScopedPreferredModels(
+  key: ManagedKeyListItem,
+  globalPreferredModels: string[],
+): string[] {
+  const seen = new Set<string>();
+  const scoped = globalPreferredModels.filter((model) =>
+    matchesModelGroup(model, key.group),
+  );
+
+  return scoped.filter((model) => {
+    const normalized = normalizeModelAlias(model);
+    if (seen.has(normalized)) {
+      return false;
+    }
+
+    seen.add(normalized);
+    return true;
+  });
+}
 
 function buildModelsToTest(
   key: ManagedKeyListItem,
@@ -321,24 +355,30 @@ function buildModelsToTest(
   globalPreferredModels: string[],
   exhaustiveModelTesting: boolean,
 ): TestCandidate[] {
-  const discoveredByLower = new Map(
-    discoveredModels.map((model) => [model.toLowerCase(), model]),
+  const scopedDiscoveredModels = discoveredModels.filter((model) =>
+    matchesModelGroup(model, key.group),
   );
-  const preferredMatches = globalPreferredModels
-    .map((model) => discoveredByLower.get(model.toLowerCase()) ?? null)
-    .filter((model): model is string => Boolean(model));
-  const preferredSeen = new Set(preferredMatches.map((model) => model.toLowerCase()));
+  const scopedPreferredModels = getScopedPreferredModels(key, globalPreferredModels);
+  const preferredCandidates = scopedPreferredModels.map((model) => ({
+    model,
+    source: "preferred" as const,
+  }));
+  const preferredSeen = new Set(
+    scopedPreferredModels.map((model) => normalizeModelAlias(model)),
+  );
   const fallbackModels = sortModelsByGroupPriority(
-    discoveredModels.filter((model) => !preferredSeen.has(model.toLowerCase())),
+    scopedDiscoveredModels.filter(
+      (model) => !preferredSeen.has(normalizeModelAlias(model)),
+    ),
     key.group,
   );
 
   return exhaustiveModelTesting
     ? [
-        ...preferredMatches.map((model) => ({ model, source: "preferred" as const })),
+        ...preferredCandidates,
         ...fallbackModels.map((model) => ({ model, source: "fallback" as const })),
       ]
-    : preferredMatches.map((model) => ({ model, source: "preferred" as const }));
+    : preferredCandidates;
 }
 
 function isClaudeFamilyModel(model: string) {
@@ -352,6 +392,7 @@ function summarizeTagAvailability(input: {
   results: ManagedKeyTestResult[];
 }) {
   const label = input.tag === "claude" ? "Claude" : "Codex";
+  const tagGroup = input.tag === "claude" ? "claude" : "codex";
   const matchedModel = input.results
     .filter((result) => result.ok && Boolean(result.discoveredModel))
     .map((result) => result.discoveredModel as string)
@@ -368,7 +409,31 @@ function summarizeTagAvailability(input: {
   }
 
   const hasAccessibleModelList = input.results.some((result) => result.ok);
+  const discoveredModels = sortModelsByGroupPriority(
+    [
+      ...new Set(
+        input.results.flatMap((result) =>
+          result.discoveredModels.filter((model) =>
+            input.tag === "claude" ? isClaudeFamilyModel(model) : !isClaudeFamilyModel(model),
+          ),
+        ),
+      ),
+    ],
+    tagGroup,
+  );
+
   if (hasAccessibleModelList) {
+    if (discoveredModels.length > 0) {
+      const preview = discoveredModels.slice(0, 6).join("、");
+      const suffix = discoveredModels.length > 6 ? ` 等 ${discoveredModels.length} 个模型` : "";
+
+      return {
+        ok: false,
+        discoveredModel: pickDiscoveredModel(discoveredModels, tagGroup),
+        message: `${label} 已发现模型：${preview}${suffix}（未逐个验证）`,
+      };
+    }
+
     return {
       ok: false,
       discoveredModel: null,
@@ -390,15 +455,27 @@ function buildCombinedTestMessage(input: {
   anthropicResult: ManagedKeyTestResult;
   openAiResult: ManagedKeyTestResult;
 }) {
-  const parts = [input.claudeSummary.message, input.codexSummary.message];
+  const parts = [input.claudeSummary.message, input.codexSummary.message].filter(
+    (message) =>
+      !/^\s*(Claude|Codex)\s*可用（测试模型：/.test(message) &&
+      !/^\s*(Claude|Codex)\s*(已发现模型|未验证)/.test(message),
+  );
 
-  if (input.anthropicResult.attemptedModels.length > 0) {
-    parts.push(`Claude 覆盖测试：${buildAttemptSummary(input.anthropicResult.attemptedModels)}`);
-  }
+  parts.push(
+    input.anthropicResult.attemptedModels.length > 0
+      ? `Claude 模型测试：${buildAttemptSummary(input.anthropicResult.attemptedModels)}`
+      : input.anthropicResult.discoveredModels.length > 0
+        ? "Claude 模型测试：未验证（接口可用）"
+        : "Claude 模型测试：无可用模型",
+  );
 
-  if (input.openAiResult.attemptedModels.length > 0) {
-    parts.push(`Codex 覆盖测试：${buildAttemptSummary(input.openAiResult.attemptedModels)}`);
-  }
+  parts.push(
+    input.openAiResult.attemptedModels.length > 0
+      ? `Codex 模型测试：${buildAttemptSummary(input.openAiResult.attemptedModels)}`
+      : input.openAiResult.discoveredModels.length > 0
+        ? "Codex 模型测试：未验证（接口可用）"
+        : "Codex 模型测试：无可用模型",
+  );
 
   return parts.join("\n");
 }
@@ -460,11 +537,18 @@ function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedModels"]) 
     return "";
   }
 
-  return attempts
+  const orderedAttempts = [
+    ...attempts.filter((attempt) => attempt.ok),
+    ...attempts.filter((attempt) => !attempt.ok),
+  ];
+
+  return orderedAttempts
     .map((attempt) => {
-      const sourceLabel = attempt.source === "preferred" ? "全局优先" : "发现模型";
-      const statusLabel = attempt.ok ? "成功" : `失败${attempt.statusCode ? `/${attempt.statusCode}` : ""}`;
-      return `${attempt.model}（${sourceLabel}，${statusLabel}）`;
+      if (attempt.ok) {
+        return attempt.model;
+      }
+
+      return `${attempt.model}（失败${attempt.statusCode ? `/${attempt.statusCode}` : ""}）`;
     })
     .join("，");
 }

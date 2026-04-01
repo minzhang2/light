@@ -171,7 +171,7 @@ function getSupportedProviders(message: string | null) {
   const providers: Array<"anthropic" | "openai"> = [];
 
   if (
-    /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(
+    /Claude\s*(?:可用|已发现模型)(?:（测试模型：|（全局优先模型通过：|，测试模型：|：)/.test(
       normalizedMessage,
     )
   ) {
@@ -179,7 +179,7 @@ function getSupportedProviders(message: string | null) {
   }
 
   if (
-    /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(
+    /Codex\s*(?:可用|已发现模型)(?:（测试模型：|（全局优先模型通过：|，测试模型：|：)/.test(
       normalizedMessage,
     )
   ) {
@@ -197,6 +197,8 @@ function normalizeProviderLabels(message: string) {
   const normalized = message
     .replaceAll("Anthropic", "Claude")
     .replaceAll("OpenAI", "Codex")
+    .replaceAll("Anthropic 模型测试", "Claude 模型测试")
+    .replaceAll("OpenAI 模型测试", "Codex 模型测试")
     .replaceAll("Claude 可用（未识别出可测试模型）", "Claude 未验证（模型列表可访问，但未识别出可测试模型）")
     .replaceAll("Codex 可用（未识别出可测试模型）", "Codex 未验证（模型列表可访问，但未识别出可测试模型）");
 
@@ -245,13 +247,39 @@ function TestMessage({
         ? "border-red-200 bg-red-50 text-red-700"
         : "border-border bg-muted/50 text-muted-foreground";
 
+  const lines = normalizedMessage.split("\n");
+
+  function renderHighlightedLine(line: string, lineIndex: number) {
+    const parts = line.split(/((?:^|[，,]\s*)[^，,\n]*（失败\/?\d*）)/g).filter(Boolean);
+
+    return (
+      <span key={`${lineIndex}-${line}`} className="block">
+        {parts.map((part, partIndex) => {
+          const failureMatch = part.match(/^([，,]?\s*)([^，,\n]*（失败\/?\d*）)(.*)$/);
+
+          if (!failureMatch) {
+            return <span key={`${lineIndex}-${partIndex}`}>{part}</span>;
+          }
+
+          return (
+            <span key={`${lineIndex}-${partIndex}`}>
+              {failureMatch[1]}
+              <span className="text-red-600">{failureMatch[2]}</span>
+              {failureMatch[3]}
+            </span>
+          );
+        })}
+      </span>
+    );
+  }
+
   return (
     <div className={`rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
       {expanded || !isCollapsible ? (
         <div className="flex items-start gap-2">
-          <p className="min-w-0 flex-1 break-all whitespace-pre-wrap">
-            {normalizedMessage}
-          </p>
+          <div className="min-w-0 flex-1 break-all whitespace-pre-wrap">
+            {lines.map((line, index) => renderHighlightedLine(line, index))}
+          </div>
           {isCollapsible ? (
             <Button
               type="button"
