@@ -1,8 +1,8 @@
 import path from "path";
+import { createRequire } from "node:module";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient as PostgresPrismaClient } from "@prisma/client";
-import { PrismaClient as LocalPrismaClient } from "@/generated/prisma-local";
 import { normalizePostgresSslMode } from "@/lib/postgres-url";
 import { Pool } from "pg";
 
@@ -11,6 +11,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 const isVercelProduction = process.env.VERCEL_ENV === "production";
+const runtimeRequire = createRequire(import.meta.url);
 
 function normalizeSqliteFileUrl(url: string) {
   // prisma 的 sqlite 使用 `file:` 连接串；如果传入的是相对路径，会受当前进程工作目录影响。
@@ -21,7 +22,7 @@ function normalizeSqliteFileUrl(url: string) {
   const [filePart, queryPart] = withoutScheme.split("?");
   const absPath = path.isAbsolute(filePart)
     ? filePart
-    : path.resolve(process.cwd(), filePart);
+    : path.resolve(/* turbopackIgnore: true */ process.cwd(), filePart);
 
   return queryPart ? `file:${absPath}?${queryPart}` : `file:${absPath}`;
 }
@@ -42,13 +43,31 @@ const useLocalSqlite = !isVercelProduction && localDatabaseUrl.startsWith("file:
 const logLevel: ("error" | "warn")[] =
   process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"];
 
+function createLocalPrismaClient() {
+  // Next.js 16 production builds use Turbopack by default.
+  // Loading the generated sqlite client lazily keeps the local-only client
+  // out of the production server bundle on Vercel.
+  const localClientPath = path.join(
+    /* turbopackIgnore: true */ process.cwd(),
+    "src/generated/prisma-local",
+  );
+  const { PrismaClient } = runtimeRequire(localClientPath) as {
+    PrismaClient: new (options: {
+      adapter: PrismaBetterSqlite3;
+      log: ("error" | "warn")[];
+    }) => PostgresPrismaClient;
+  };
+
+  return new PrismaClient({
+    adapter: new PrismaBetterSqlite3({
+      url: localDatabaseUrl,
+    }),
+    log: logLevel,
+  });
+}
+
 const prismaClient = useLocalSqlite
-  ? new LocalPrismaClient({
-      adapter: new PrismaBetterSqlite3({
-        url: localDatabaseUrl,
-      }),
-      log: logLevel,
-    })
+  ? createLocalPrismaClient()
   : (() => {
       if (!postgresUrl || postgresUrl.startsWith("file:")) {
         throw new Error(
