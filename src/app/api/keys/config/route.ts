@@ -28,12 +28,19 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const payload = (await request.json()) as { preferredModels?: unknown };
+    const payload = (await request.json()) as {
+      preferredModels?: unknown;
+      exhaustiveModelTesting?: unknown;
+    };
     const config = await setGlobalConfig({
       preferredModels:
         Array.isArray(payload.preferredModels) &&
         payload.preferredModels.every((m) => typeof m === "string")
           ? (payload.preferredModels as string[])
+          : undefined,
+      exhaustiveModelTesting:
+        typeof payload.exhaustiveModelTesting === "boolean"
+          ? payload.exhaustiveModelTesting
           : undefined,
     });
 

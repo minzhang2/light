@@ -19,6 +19,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
@@ -666,10 +668,11 @@ export function ManagedKeyManager({
   const { toast, dismiss } = useToast();
   const [keys, setKeys] = useState(initialKeys);
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>(
-    initialConfig ?? { preferredModels: [] },
+    initialConfig ?? { preferredModels: [], exhaustiveModelTesting: false },
   );
   const [showSettings, setShowSettings] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState("");
+  const [exhaustiveModelTestingDraft, setExhaustiveModelTestingDraft] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<KeyFilter>("all");
@@ -1126,7 +1129,10 @@ export function ManagedKeyManager({
       const response = await fetch("/api/keys/config", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ preferredModels }),
+        body: JSON.stringify({
+          preferredModels,
+          exhaustiveModelTesting: exhaustiveModelTestingDraft,
+        }),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -1274,6 +1280,9 @@ export function ManagedKeyManager({
               onClick={() => {
                 if (!showSettings) {
                   setSettingsDraft((globalConfig?.preferredModels ?? []).join(", "));
+                  setExhaustiveModelTestingDraft(
+                    globalConfig?.exhaustiveModelTesting ?? false,
+                  );
                 }
                 setShowSettings(!showSettings);
               }}
@@ -1319,6 +1328,19 @@ export function ManagedKeyManager({
             />
             <p className="text-xs text-muted-foreground">测试时优先使用列表中的模型，适用于所有 key。</p>
           </label>
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2.5">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">发现模型时逐个覆盖测试</Label>
+              <p className="text-xs text-muted-foreground">
+                关闭时只测试全局优先模型，其他模型仅扫描发现；开启后会继续把发现到的模型逐个测试。
+              </p>
+            </div>
+            <Switch
+              checked={exhaustiveModelTestingDraft}
+              onCheckedChange={setExhaustiveModelTestingDraft}
+              aria-label="切换逐个覆盖测试"
+            />
+          </div>
           <div className="flex justify-end gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => setShowSettings(false)} disabled={isSavingSettings}>取消</Button>
             <Button type="button" size="sm" onClick={handleSaveSettings} disabled={isSavingSettings}>{isSavingSettings ? "保存中..." : "保存"}</Button>

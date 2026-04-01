@@ -45,6 +45,19 @@ function parseJsonArray(value: string | null) {
   }
 }
 
+function parseBooleanValue(value: string | null, fallback = false) {
+  if (value === null) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "boolean" ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function normalizeModelConfig(values: string[]) {
   const seen = new Set<string>();
   const normalized: string[] = [];
@@ -306,7 +319,8 @@ function buildModelsToTest(
   key: ManagedKeyListItem,
   discoveredModels: string[],
   globalPreferredModels: string[],
-) : TestCandidate[] {
+  exhaustiveModelTesting: boolean,
+): TestCandidate[] {
   const discoveredByLower = new Map(
     discoveredModels.map((model) => [model.toLowerCase(), model]),
   );
@@ -319,10 +333,12 @@ function buildModelsToTest(
     key.group,
   );
 
-  return [
-    ...preferredMatches.map((model) => ({ model, source: "preferred" as const })),
-    ...fallbackModels.map((model) => ({ model, source: "fallback" as const })),
-  ];
+  return exhaustiveModelTesting
+    ? [
+        ...preferredMatches.map((model) => ({ model, source: "preferred" as const })),
+        ...fallbackModels.map((model) => ({ model, source: "fallback" as const })),
+      ]
+    : preferredMatches.map((model) => ({ model, source: "preferred" as const }));
 }
 
 function isClaudeFamilyModel(model: string) {
@@ -402,12 +418,13 @@ async function runProtocolTest(
   key: ManagedKeyListItem,
   protocol: ManagedKeyProtocol,
   globalPreferredModels: string[],
+  exhaustiveModelTesting: boolean,
 ): Promise<ManagedKeyTestResult> {
   try {
     const candidate = buildTestInputByProtocol(key, protocol);
     return protocol === "anthropic"
-      ? await testAnthropicKey(candidate, globalPreferredModels)
-      : await testOpenAiKey(candidate, globalPreferredModels);
+      ? await testAnthropicKey(candidate, globalPreferredModels, exhaustiveModelTesting)
+      : await testOpenAiKey(candidate, globalPreferredModels, exhaustiveModelTesting);
   } catch (error) {
     return {
       ok: false,
@@ -452,9 +469,18 @@ function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedModels"]) 
     .join("，");
 }
 
-async function testAnthropicKey(key: ManagedKeyListItem, globalPreferredModels: string[]): Promise<ManagedKeyTestResult> {
+async function testAnthropicKey(
+  key: ManagedKeyListItem,
+  globalPreferredModels: string[],
+  exhaustiveModelTesting: boolean,
+): Promise<ManagedKeyTestResult> {
   const discovered = await discoverAnthropicModels(key);
-  const modelsToTest = buildModelsToTest(key, discovered.ids, globalPreferredModels);
+  const modelsToTest = buildModelsToTest(
+    key,
+    discovered.ids,
+    globalPreferredModels,
+    exhaustiveModelTesting,
+  );
 
   if (!discovered.response.ok) {
     return {
@@ -473,7 +499,12 @@ async function testAnthropicKey(key: ManagedKeyListItem, globalPreferredModels: 
   if (modelsToTest.length === 0) {
     return {
       ok: true,
-      message: "模型列表访问成功，但没有识别出可测试模型。",
+      message:
+        discovered.ids.length > 0
+          ? globalPreferredModels.length > 0
+            ? "模型列表访问成功，但未命中全局优先模型；已完成可用模型扫描。"
+            : "模型列表访问成功，但尚未配置全局优先模型；已完成可用模型扫描。"
+          : "模型列表访问成功，但没有识别出可测试模型。",
       statusCode: discovered.response.status,
       testedAt: new Date().toISOString(),
       discoveredModel: null,
@@ -570,9 +601,18 @@ async function testAnthropicKey(key: ManagedKeyListItem, globalPreferredModels: 
   };
 }
 
-async function testOpenAiKey(key: ManagedKeyListItem, globalPreferredModels: string[]): Promise<ManagedKeyTestResult> {
+async function testOpenAiKey(
+  key: ManagedKeyListItem,
+  globalPreferredModels: string[],
+  exhaustiveModelTesting: boolean,
+): Promise<ManagedKeyTestResult> {
   const discovered = await discoverOpenAiModels(key);
-  const modelsToTest = buildModelsToTest(key, discovered.ids, globalPreferredModels);
+  const modelsToTest = buildModelsToTest(
+    key,
+    discovered.ids,
+    globalPreferredModels,
+    exhaustiveModelTesting,
+  );
 
   if (!discovered.response.ok) {
     return {
@@ -591,7 +631,12 @@ async function testOpenAiKey(key: ManagedKeyListItem, globalPreferredModels: str
   if (modelsToTest.length === 0) {
     return {
       ok: true,
-      message: "模型列表访问成功，但没有识别出可测试模型。",
+      message:
+        discovered.ids.length > 0
+          ? globalPreferredModels.length > 0
+            ? "模型列表访问成功，但未命中全局优先模型；已完成可用模型扫描。"
+            : "模型列表访问成功，但尚未配置全局优先模型；已完成可用模型扫描。"
+          : "模型列表访问成功，但没有识别出可测试模型。",
       statusCode: discovered.response.status,
       testedAt: new Date().toISOString(),
       discoveredModel: null,
@@ -690,11 +735,18 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
   const preferredRecord = await prisma.appConfig.findUnique({
     where: { key: "preferredModels" },
   });
+  const exhaustiveModelTestingRecord = await prisma.appConfig.findUnique({
+    where: { key: "exhaustiveModelTesting" },
+  });
   const preferredModels = normalizeModelConfig(
     parseJsonArray(preferredRecord?.value ?? null),
   );
+  const exhaustiveModelTesting = parseBooleanValue(
+    exhaustiveModelTestingRecord?.value ?? null,
+    false,
+  );
 
-  return { preferredModels };
+  return { preferredModels, exhaustiveModelTesting };
 }
 
 export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<GlobalConfig> {
@@ -711,12 +763,20 @@ export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<Gl
     });
   }
 
-  return getGlobalConfig();
-}
+  if (config.exhaustiveModelTesting !== undefined) {
+    await prisma.appConfig.upsert({
+      where: { key: "exhaustiveModelTesting" },
+      create: {
+        key: "exhaustiveModelTesting",
+        value: JSON.stringify(Boolean(config.exhaustiveModelTesting)),
+      },
+      update: {
+        value: JSON.stringify(Boolean(config.exhaustiveModelTesting)),
+      },
+    });
+  }
 
-async function getPreferredModels(): Promise<string[]> {
-  const config = await getGlobalConfig();
-  return config.preferredModels;
+  return getGlobalConfig();
 }
 
 export async function listManagedKeys() {
@@ -855,10 +915,12 @@ export async function testManagedKey(id: string) {
   }
 
   const listItem = toListItem(key);
-  const globalPreferredModels = await getPreferredModels();
+  const globalConfig = await getGlobalConfig();
+  const globalPreferredModels = globalConfig.preferredModels;
+  const exhaustiveModelTesting = globalConfig.exhaustiveModelTesting;
   const [anthropicResult, openAiResult] = await Promise.all([
-    runProtocolTest(listItem, "anthropic", globalPreferredModels),
-    runProtocolTest(listItem, "openai", globalPreferredModels),
+    runProtocolTest(listItem, "anthropic", globalPreferredModels, exhaustiveModelTesting),
+    runProtocolTest(listItem, "openai", globalPreferredModels, exhaustiveModelTesting),
   ]);
   const protocolResults = [anthropicResult, openAiResult];
   const claudeSummary = summarizeTagAvailability({

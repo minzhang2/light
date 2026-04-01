@@ -68,4 +68,5 @@ export type ManagedKeyUpdateInput = {
 
 export type GlobalConfig = {
   preferredModels: string[];
+  exhaustiveModelTesting: boolean;
 };
