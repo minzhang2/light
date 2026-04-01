@@ -3,6 +3,13 @@ export type ChatMessageInput = {
   content: string;
 };
 
+export type ChatAttachmentInput = {
+  name: string;
+  mimeType: string;
+  data: string;
+  size: number;
+};
+
 export type ChatKeyOption = {
   id: string;
   name: string;

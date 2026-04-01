@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { ManagedKeyListItem } from "@/features/managed-keys/types";
 import type {
+  ChatAttachmentInput,
   ChatCompletionResult,
   ChatKeyOption,
   ChatMessageInput,
@@ -39,6 +40,213 @@ function normalizeChatMessages(messages: ChatMessageInput[]) {
     }))
     .filter((item) => item.content.length > 0)
     .slice(-20);
+}
+
+function isImageMimeType(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+function isPdfMimeType(mimeType: string) {
+  return mimeType === "application/pdf";
+}
+
+function isTextLikeAttachment(attachment: ChatAttachmentInput) {
+  if (attachment.mimeType.startsWith("text/")) {
+    return true;
+  }
+
+  return [
+    "application/json",
+    "application/ld+json",
+    "application/xml",
+    "application/javascript",
+    "application/typescript",
+    "application/x-javascript",
+    "application/x-typescript",
+    "application/yaml",
+    "application/x-yaml",
+  ].includes(attachment.mimeType);
+}
+
+function attachmentToDataUrl(attachment: ChatAttachmentInput) {
+  return `data:${attachment.mimeType};base64,${attachment.data}`;
+}
+
+function decodeAttachmentText(attachment: ChatAttachmentInput) {
+  return Buffer.from(attachment.data, "base64").toString("utf-8");
+}
+
+function formatAttachmentSummary(attachments: ChatAttachmentInput[]) {
+  if (attachments.length === 0) {
+    return "";
+  }
+
+  return attachments
+    .map((attachment) => `- ${attachment.name} (${attachment.mimeType || "application/octet-stream"})`)
+    .join("\n");
+}
+
+function buildStoredUserContent(content: string, attachments: ChatAttachmentInput[]) {
+  const trimmedContent = content.trim();
+  const attachmentSummary = formatAttachmentSummary(attachments);
+
+  if (!attachmentSummary) {
+    return trimmedContent;
+  }
+
+  if (!trimmedContent) {
+    return `[本次临时附件]\n${attachmentSummary}`;
+  }
+
+  return `${trimmedContent}\n\n[本次临时附件]\n${attachmentSummary}`;
+}
+
+function buildAnthropicMessages(
+  messages: ChatMessageInput[],
+  attachments: ChatAttachmentInput[],
+) {
+  if (attachments.length === 0) {
+    return messages;
+  }
+
+  const lastIndex = messages.length - 1;
+  const lastMessage = messages[lastIndex];
+
+  if (!lastMessage || lastMessage.role !== "user") {
+    return messages;
+  }
+
+  const contentBlocks: Array<
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        source: {
+          type: "base64";
+          media_type: string;
+          data: string;
+        };
+      }
+    | {
+        type: "document";
+        source: {
+          type: "base64";
+          media_type: string;
+          data: string;
+        };
+      }
+  > = [];
+
+  if (lastMessage.content.trim()) {
+    contentBlocks.push({ type: "text", text: lastMessage.content.trim() });
+  }
+
+  for (const attachment of attachments) {
+    if (isImageMimeType(attachment.mimeType)) {
+      contentBlocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: attachment.mimeType,
+          data: attachment.data,
+        },
+      });
+      continue;
+    }
+
+    if (isPdfMimeType(attachment.mimeType)) {
+      contentBlocks.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: attachment.mimeType,
+          data: attachment.data,
+        },
+      });
+      continue;
+    }
+
+    if (isTextLikeAttachment(attachment)) {
+      contentBlocks.push({
+        type: "text",
+        text: `文件：${attachment.name}\n\n${decodeAttachmentText(attachment)}`,
+      });
+      continue;
+    }
+
+    throw new Error(`当前模型暂不支持文件类型：${attachment.name}`);
+  }
+
+  if (contentBlocks.length === 0) {
+    return messages;
+  }
+
+  return messages.map((message, index) =>
+    index === lastIndex
+      ? {
+          role: message.role,
+          content: contentBlocks,
+        }
+      : message,
+  );
+}
+
+function buildOpenAiMessages(
+  messages: ChatMessageInput[],
+  attachments: ChatAttachmentInput[],
+) {
+  if (attachments.length === 0) {
+    return messages;
+  }
+
+  const lastIndex = messages.length - 1;
+  const lastMessage = messages[lastIndex];
+
+  if (!lastMessage || lastMessage.role !== "user") {
+    return messages;
+  }
+
+  const contentParts: Array<
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string } }
+    | { type: "file"; file: { filename: string; file_data: string } }
+  > = [];
+
+  if (lastMessage.content.trim()) {
+    contentParts.push({ type: "text", text: lastMessage.content.trim() });
+  }
+
+  for (const attachment of attachments) {
+    if (isImageMimeType(attachment.mimeType)) {
+      contentParts.push({
+        type: "image_url",
+        image_url: {
+          url: attachmentToDataUrl(attachment),
+        },
+      });
+      continue;
+    }
+
+    contentParts.push({
+      type: "file",
+      file: {
+        filename: attachment.name,
+        file_data: attachmentToDataUrl(attachment),
+      },
+    });
+  }
+
+  if (contentParts.length === 0) {
+    return messages;
+  }
+
+  return messages.map((message, index) =>
+    index === lastIndex
+      ? {
+          role: message.role,
+          content: contentParts,
+        }
+      : message,
+  );
 }
 
 function extractErrorMessage(payload: unknown) {
@@ -219,6 +427,7 @@ export async function createChatCompletion(input: {
   keyId: string;
   model: string;
   messages: ChatMessageInput[];
+  attachments?: ChatAttachmentInput[];
   signal?: AbortSignal;
 }): Promise<ChatCompletionResult> {
   const key = await prisma.managedKey.findUnique({
@@ -249,6 +458,7 @@ export async function createChatCompletion(input: {
   }
 
   const messages = normalizeChatMessages(input.messages);
+  const attachments = input.attachments ?? [];
 
   if (messages.length === 0) {
     throw new Error("至少需要一条有效消息。");
@@ -278,6 +488,8 @@ export async function createChatCompletion(input: {
   }
 
   if (requestProtocol === "anthropic") {
+    const requestMessages = buildAnthropicMessages(messages, attachments);
+
     const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
       method: "POST",
       headers: {
@@ -289,7 +501,7 @@ export async function createChatCompletion(input: {
       body: JSON.stringify({
         model: input.model,
         max_tokens: 2048,
-        messages,
+        messages: requestMessages,
       }),
       signal: requestSignal,
     });
@@ -315,6 +527,8 @@ export async function createChatCompletion(input: {
     };
   }
 
+  const requestMessages = buildOpenAiMessages(messages, attachments);
+
   const response = await fetch(joinBaseUrl(key.baseUrl, "/chat/completions"), {
     method: "POST",
     headers: {
@@ -323,7 +537,7 @@ export async function createChatCompletion(input: {
     },
     body: JSON.stringify({
       model: input.model,
-      messages,
+      messages: requestMessages,
     }),
     signal: requestSignal,
   });
@@ -347,6 +561,17 @@ export async function createChatCompletion(input: {
     model: input.model,
     keyName: key.name,
   };
+}
+
+export function describeChatAttachmentsForStorage(attachments: ChatAttachmentInput[]) {
+  return formatAttachmentSummary(attachments);
+}
+
+export function buildStoredChatUserMessage(
+  content: string,
+  attachments: ChatAttachmentInput[],
+) {
+  return buildStoredUserContent(content, attachments);
 }
 
 export async function listChatSessions(userId: string): Promise<ChatSessionListItem[]> {

@@ -6,10 +6,14 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ClipboardIcon,
+  FileIcon,
+  ImageIcon,
   MessageCircleIcon,
+  PaperclipIcon,
   RefreshCwIcon,
   SquareIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
 
 import {
@@ -21,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -30,7 +35,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ChatKeyOption, ChatMessageInput, ChatSessionDetail } from "@/features/chat/types";
+import type {
+  ChatKeyOption,
+  ChatMessageInput,
+  ChatSessionDetail,
+} from "@/features/chat/types";
 import { cn } from "@/lib/utils";
 
 type ChatMessage = ChatMessageInput & {
@@ -115,6 +124,153 @@ function getMessagesForRequest(messages: ChatMessageInput[]) {
     role: item.role,
     content: item.content,
   }));
+}
+
+function formatAttachmentNames(files: File[]) {
+  return files.map((file) => file.name).join("、");
+}
+
+function buildUserMessagePreview(content: string, files: File[]) {
+  const trimmed = content.trim();
+
+  if (files.length === 0) {
+    return trimmed;
+  }
+
+  const summary = files.map((file) => `- ${file.name}`).join("\n");
+
+  if (!trimmed) {
+    return `[本次临时附件]\n${summary}`;
+  }
+
+  return `${trimmed}\n\n[本次临时附件]\n${summary}`;
+}
+
+function parseMessageContent(content: string) {
+  const marker = "[本次临时附件]";
+  const markerIndex = content.indexOf(marker);
+
+  if (markerIndex === -1) {
+    return {
+      text: content,
+      attachments: [] as string[],
+    };
+  }
+
+  const text = content.slice(0, markerIndex).trim();
+  const attachmentLines = content
+    .slice(markerIndex + marker.length)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^-\s*/, "").trim())
+    .filter(Boolean);
+
+  return {
+    text,
+    attachments: attachmentLines,
+  };
+}
+
+function inferAttachmentKind(label: string) {
+  const normalized = label.toLowerCase();
+
+  if (
+    normalized.includes("(image/") ||
+    /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)(\s|$|\()/.test(normalized)
+  ) {
+    return "图片";
+  }
+
+  return "文件";
+}
+
+function MessageContent({
+  message,
+}: {
+  message: ChatMessage;
+}) {
+  const parsed = parseMessageContent(message.content);
+  const isUser = message.role === "user";
+  const attachmentClassName = isUser ? "text-primary-foreground/72" : "text-muted-foreground";
+
+  return (
+    <div>
+      {parsed.text ? (
+        <p className="break-words whitespace-pre-wrap">{parsed.text}</p>
+      ) : null}
+      {parsed.attachments.length > 0 ? (
+        <div className={cn("flex min-w-0 items-center gap-1.5 text-[11px]", attachmentClassName)}>
+          {parsed.attachments.length === 1 && inferAttachmentKind(parsed.attachments[0]) === "图片" ? (
+            <ImageIcon className="size-3 shrink-0" />
+          ) : parsed.attachments.length === 1 ? (
+            <FileIcon className="size-3 shrink-0" />
+          ) : (
+            <PaperclipIcon className="size-3 shrink-0" />
+          )}
+          <span className="min-w-0 truncate" title={parsed.attachments.join("、")}>
+            {parsed.attachments.join("、")}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function buildChatFormData(input: {
+  keyId: string;
+  model: string;
+  messages: ChatMessageInput[];
+  sessionId: string | null;
+  files: File[];
+}) {
+  const formData = new FormData();
+  formData.set("keyId", input.keyId);
+  formData.set("model", input.model);
+  formData.set("messages", JSON.stringify(getMessagesForRequest(input.messages)));
+
+  if (input.sessionId) {
+    formData.set("sessionId", input.sessionId);
+  }
+
+  for (const file of input.files) {
+    formData.append("attachments", file, file.name);
+  }
+
+  return formData;
+}
+
+function FileChip({
+  file,
+  onRemove,
+  disabled,
+}: {
+  file: File;
+  onRemove: () => void;
+  disabled: boolean;
+}) {
+  const isImage = file.type.startsWith("image/");
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
+      <PaperclipIcon className="size-3 shrink-0" />
+      <span className="truncate">{file.name}</span>
+      <span className="shrink-0 text-[10px] uppercase text-foreground/45">
+        {isImage ? "图片" : "文件"}
+      </span>
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="ghost"
+        className="size-5 rounded-full"
+        onClick={onRemove}
+        disabled={disabled}
+        aria-label={`移除 ${file.name}`}
+      >
+        <XIcon className="size-3" />
+      </Button>
+    </span>
+  );
 }
 
 function KeySupportBadges({
@@ -220,6 +376,7 @@ export function ChatPlayground({
   const [selectedKeyId, setSelectedKeyId] = useState<string | null>(defaultKeyId);
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     (initialSession?.messages ?? []).map((m) => ({ ...m })),
   );
@@ -234,6 +391,7 @@ export function ChatPlayground({
   const { toast } = useToast();
   const messagesRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(externalSessionId ?? null);
   const messagesStateRef = useRef<ChatMessage[]>((initialSession?.messages ?? []).map((m) => ({ ...m })));
 
@@ -420,26 +578,37 @@ export function ChatPlayground({
       return;
     }
 
-    if (!content) {
+    if (!content && pendingFiles.length === 0) {
       return;
     }
+
+    const optimisticContent = buildUserMessagePreview(content, pendingFiles);
 
     const nextUserMessage: ChatMessage = {
       id: makeMessageId(),
       role: "user",
-      content,
+      content: optimisticContent,
     };
     const nextMessages = [...messages, nextUserMessage];
+    const requestMessages = [
+      ...getMessagesForRequest(messages),
+      { role: "user" as const, content },
+    ];
+    const filesToSend = pendingFiles;
 
     setMessages(nextMessages);
     setInput("");
+    setPendingFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
     setIsSending(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const activeSessionId = await ensureSession(content, controller.signal);
+      const activeSessionId = await ensureSession(content || formatAttachmentNames(filesToSend), controller.signal);
 
       if (controller.signal.aborted || abortControllerRef.current !== controller) {
         return;
@@ -447,14 +616,12 @@ export function ChatPlayground({
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+        body: buildChatFormData({
           keyId: selectedKey.id,
           model: selectedModel,
-          messages: getMessagesForRequest(nextMessages),
+          messages: requestMessages,
           sessionId: activeSessionId,
+          files: filesToSend,
         }),
         signal: controller.signal,
       });
@@ -667,6 +834,33 @@ export function ChatPlayground({
     onSessionUpdated?.();
   }
 
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = Array.from(event.target.files ?? []);
+
+    if (fileList.length === 0) {
+      return;
+    }
+
+    setPendingFiles((current) => {
+      const next = [...current];
+      const seen = new Set(
+        current.map((file) => `${file.name}:${file.size}:${file.lastModified}`),
+      );
+
+      for (const file of fileList) {
+        const fingerprint = `${file.name}:${file.size}:${file.lastModified}`;
+        if (!seen.has(fingerprint)) {
+          seen.add(fingerprint);
+          next.push(file);
+        }
+      }
+
+      return next;
+    });
+
+    event.target.value = "";
+  }
+
   if (keys.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
@@ -732,7 +926,7 @@ export function ChatPlayground({
                         : "rounded-tl-sm border border-border/70 bg-muted/40 text-foreground",
                     )}
                   >
-                    {message.content}
+                    <MessageContent message={message} />
                   </div>
                   <MessageActions align={message.role === "user" ? "end" : "start"}>
                     {retryableMessageIds.includes(message.id) ? (
@@ -773,6 +967,22 @@ export function ChatPlayground({
       <div className="shrink-0 px-3 pb-4 pt-3 md:px-8 md:pb-8 md:pt-4">
         <div className="mx-auto max-w-5xl">
           <div className="rounded-2xl border border-border/60 bg-background shadow-sm transition-colors focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/15">
+            {pendingFiles.length > 0 ? (
+              <div className="flex flex-wrap gap-2 px-4 pt-4">
+                {pendingFiles.map((file, index) => (
+                  <FileChip
+                    key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                    file={file}
+                    disabled={isSending}
+                    onRemove={() => {
+                      setPendingFiles((current) =>
+                        current.filter((_, currentIndex) => currentIndex !== index),
+                      );
+                    }}
+                  />
+                ))}
+              </div>
+            ) : null}
             <Textarea
               id="chat-input"
               value={input}
@@ -789,6 +999,24 @@ export function ChatPlayground({
               className="min-h-16 resize-none border-0 bg-transparent px-5 pt-4 pb-2 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
             />
             <div className="flex items-center gap-1.5 overflow-hidden px-4 pb-2">
+              <Input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSending}
+                aria-label="上传图片或文件"
+              >
+                <PaperclipIcon className="size-4" />
+              </Button>
               <div className="min-w-0 shrink">
                 <Select
                   value={selectedKeyId ?? undefined}
@@ -857,7 +1085,7 @@ export function ChatPlayground({
                 <Button
                   type="button"
                   onClick={isSending ? handleCancelSend : handleSend}
-                  disabled={!isSending && !input.trim()}
+                  disabled={!isSending && !input.trim() && pendingFiles.length === 0}
                   aria-busy={isSending}
                   className={cn(
                     "size-10 rounded-full text-white shadow-none focus-visible:ring-neutral-200 disabled:text-white disabled:opacity-100",
