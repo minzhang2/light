@@ -737,6 +737,7 @@ export function MailContainer() {
           deletingIds={deletingIds}
           emailsLoadingIds={emailsLoadingIds}
           mailboxes={mailboxes}
+          onCopyMailbox={handleCopyMailbox}
           onDeleteMailbox={(mailbox) => void deleteMailbox(mailbox)}
           onFetchEmails={(mailbox) => void fetchEmails(mailbox)}
           onSelectMailbox={(mailbox) => setActiveMailboxId(mailbox.id)}
@@ -758,6 +759,7 @@ export function MailContainer() {
               deletingIds={deletingIds}
               emailsLoadingIds={emailsLoadingIds}
               mailboxes={mailboxes}
+              onCopyMailbox={handleCopyMailbox}
               onDeleteMailbox={(mailbox) => void deleteMailbox(mailbox)}
               onFetchEmails={(mailbox) => void fetchEmails(mailbox)}
               onSelectMailbox={(mailbox) => {
