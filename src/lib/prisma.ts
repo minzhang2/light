@@ -47,11 +47,7 @@ function createLocalPrismaClient() {
   // Next.js 16 production builds use Turbopack by default.
   // Loading the generated sqlite client lazily keeps the local-only client
   // out of the production server bundle on Vercel.
-  const localClientPath = path.join(
-    /* turbopackIgnore: true */ process.cwd(),
-    "src/generated/prisma-local",
-  );
-  const { PrismaClient } = runtimeRequire(localClientPath) as {
+  const { PrismaClient } = runtimeRequire("../generated/prisma-local") as {
     PrismaClient: new (options: {
       adapter: PrismaBetterSqlite3;
       log: ("error" | "warn")[];
