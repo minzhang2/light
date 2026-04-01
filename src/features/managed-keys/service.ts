@@ -6,6 +6,7 @@ import {
   parseManagedKeys,
 } from "@/features/managed-keys/parser";
 import type {
+  GlobalConfig,
   ManagedKeyListItem,
   ManagedKeyProtocol,
   ManagedKeyTestResult,
@@ -42,6 +43,29 @@ function parseJsonArray(value: string | null) {
   } catch {
     return [];
   }
+}
+
+function normalizeModelConfig(values: string[]) {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      continue;
+    }
+
+    const lower = trimmed.toLowerCase();
+    if (seen.has(lower)) {
+      continue;
+    }
+
+    seen.add(lower);
+    normalized.push(trimmed);
+  }
+
+  return normalized;
 }
 
 function normalizeBaseUrl(value: string) {
@@ -255,12 +279,50 @@ function pickDiscoveredModel(models: string[], preferredGroup: ManagedKeyListIte
   return models[0] ?? null;
 }
 
-function pickModelForTest(key: ManagedKeyListItem, discoveredModels: string[]) {
-  if (key.model && discoveredModels.includes(key.model)) {
-    return key.model;
-  }
+function sortModelsByGroupPriority(
+  models: string[],
+  preferredGroup: ManagedKeyListItem["group"],
+) {
+  const priorities =
+    preferredGroup === "codex"
+      ? ["gpt-5", "codex", "gpt-4.1", "o4"]
+      : ["claude", "sonnet", "opus", "haiku"];
 
-  return pickDiscoveredModel(discoveredModels, key.group);
+  const getPriority = (model: string) => {
+    const lowered = model.toLowerCase();
+    const index = priorities.findIndex((priority) => lowered.includes(priority));
+    return index === -1 ? priorities.length : index;
+  };
+
+  return [...models].sort((left, right) => getPriority(left) - getPriority(right));
+}
+
+type TestCandidate = {
+  model: string;
+  source: "preferred" | "fallback";
+};
+
+function buildModelsToTest(
+  key: ManagedKeyListItem,
+  discoveredModels: string[],
+  globalPreferredModels: string[],
+) : TestCandidate[] {
+  const discoveredByLower = new Map(
+    discoveredModels.map((model) => [model.toLowerCase(), model]),
+  );
+  const preferredMatches = globalPreferredModels
+    .map((model) => discoveredByLower.get(model.toLowerCase()) ?? null)
+    .filter((model): model is string => Boolean(model));
+  const preferredSeen = new Set(preferredMatches.map((model) => model.toLowerCase()));
+  const fallbackModels = sortModelsByGroupPriority(
+    discoveredModels.filter((model) => !preferredSeen.has(model.toLowerCase())),
+    key.group,
+  );
+
+  return [
+    ...preferredMatches.map((model) => ({ model, source: "preferred" as const })),
+    ...fallbackModels.map((model) => ({ model, source: "fallback" as const })),
+  ];
 }
 
 function isClaudeFamilyModel(model: string) {
@@ -309,8 +371,20 @@ function summarizeTagAvailability(input: {
 function buildCombinedTestMessage(input: {
   claudeSummary: ReturnType<typeof summarizeTagAvailability>;
   codexSummary: ReturnType<typeof summarizeTagAvailability>;
+  anthropicResult: ManagedKeyTestResult;
+  openAiResult: ManagedKeyTestResult;
 }) {
-  return `${input.claudeSummary.message}；${input.codexSummary.message}`;
+  const parts = [input.claudeSummary.message, input.codexSummary.message];
+
+  if (input.anthropicResult.attemptedModels.length > 0) {
+    parts.push(`Claude 覆盖测试：${buildAttemptSummary(input.anthropicResult.attemptedModels)}`);
+  }
+
+  if (input.openAiResult.attemptedModels.length > 0) {
+    parts.push(`Codex 覆盖测试：${buildAttemptSummary(input.openAiResult.attemptedModels)}`);
+  }
+
+  return parts.join("\n");
 }
 
 function buildTestInputByProtocol(
@@ -327,12 +401,13 @@ function buildTestInputByProtocol(
 async function runProtocolTest(
   key: ManagedKeyListItem,
   protocol: ManagedKeyProtocol,
+  globalPreferredModels: string[],
 ): Promise<ManagedKeyTestResult> {
   try {
     const candidate = buildTestInputByProtocol(key, protocol);
     return protocol === "anthropic"
-      ? await testAnthropicKey(candidate)
-      : await testOpenAiKey(candidate);
+      ? await testAnthropicKey(candidate, globalPreferredModels)
+      : await testOpenAiKey(candidate, globalPreferredModels);
   } catch (error) {
     return {
       ok: false,
@@ -341,6 +416,7 @@ async function runProtocolTest(
       testedAt: new Date().toISOString(),
       discoveredModel: null,
       discoveredModels: [],
+      attemptedModels: [],
     };
   }
 }
@@ -362,9 +438,23 @@ function extractErrorMessage(payload: unknown) {
   return null;
 }
 
-async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTestResult> {
+function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedModels"]) {
+  if (attempts.length === 0) {
+    return "";
+  }
+
+  return attempts
+    .map((attempt) => {
+      const sourceLabel = attempt.source === "preferred" ? "全局优先" : "发现模型";
+      const statusLabel = attempt.ok ? "成功" : `失败${attempt.statusCode ? `/${attempt.statusCode}` : ""}`;
+      return `${attempt.model}（${sourceLabel}，${statusLabel}）`;
+    })
+    .join("，");
+}
+
+async function testAnthropicKey(key: ManagedKeyListItem, globalPreferredModels: string[]): Promise<ManagedKeyTestResult> {
   const discovered = await discoverAnthropicModels(key);
-  const discoveredModel = pickModelForTest(key, discovered.ids);
+  const modelsToTest = buildModelsToTest(key, discovered.ids, globalPreferredModels);
 
   if (!discovered.response.ok) {
     return {
@@ -374,12 +464,13 @@ async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTest
         `模型列表请求失败（HTTP ${discovered.response.status}）`,
       statusCode: discovered.response.status,
       testedAt: new Date().toISOString(),
-      discoveredModel,
+      discoveredModel: null,
       discoveredModels: discovered.ids,
+      attemptedModels: [],
     };
   }
 
-  if (!discoveredModel) {
+  if (modelsToTest.length === 0) {
     return {
       ok: true,
       message: "模型列表访问成功，但没有识别出可测试模型。",
@@ -387,45 +478,101 @@ async function testAnthropicKey(key: ManagedKeyListItem): Promise<ManagedKeyTest
       testedAt: new Date().toISOString(),
       discoveredModel: null,
       discoveredModels: discovered.ids,
+      attemptedModels: [],
     };
   }
 
-  const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
-    method: "POST",
-    headers: {
-      "anthropic-version": "2023-06-01",
-      authorization: `Bearer ${key.secret}`,
-      "content-type": "application/json",
-      "x-api-key": key.secret,
-    },
-    body: JSON.stringify({
-      model: discoveredModel,
-      max_tokens: 12,
-      messages: [{ role: "user", content: "ping" }],
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
+  const attempts: ManagedKeyTestResult["attemptedModels"] = [];
+  let lastFailureMessage: string | null = null;
+  let lastStatusCode: number | null = discovered.response.status;
+  let successfulModel: string | null = null;
+  let successfulPreferredModel: string | null = null;
 
-  const payload = (await response.json().catch(() => null)) as
-    | { content?: Array<{ text?: string }> }
-    | { error?: { message?: string } }
-    | null;
+  for (const candidate of modelsToTest) {
+    const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
+      method: "POST",
+      headers: {
+        "anthropic-version": "2023-06-01",
+        authorization: `Bearer ${key.secret}`,
+        "content-type": "application/json",
+        "x-api-key": key.secret,
+      },
+      body: JSON.stringify({
+        model: candidate.model,
+        max_tokens: 12,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { content?: Array<{ text?: string }> }
+      | { error?: { message?: string } }
+      | null;
+
+    if (response.ok) {
+      attempts.push({
+        model: candidate.model,
+        ok: true,
+        statusCode: response.status,
+        message: "测试成功",
+        source: candidate.source,
+      });
+      successfulModel ??= candidate.model;
+      if (candidate.source === "preferred") {
+        successfulPreferredModel ??= candidate.model;
+      }
+      continue;
+    }
+
+    lastFailureMessage = extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`;
+    lastStatusCode = response.status;
+    attempts.push({
+      model: candidate.model,
+      ok: false,
+      statusCode: response.status,
+      message: lastFailureMessage,
+      source: candidate.source,
+    });
+  }
+
+  const passedPreferredModels = attempts
+    .filter((attempt) => attempt.ok && attempt.source === "preferred")
+    .map((attempt) => attempt.model);
+
+  if (successfulModel) {
+    const primaryModel = successfulPreferredModel ?? successfulModel;
+    const successLabel =
+      passedPreferredModels.length > 0
+        ? `Claude 可用（全局优先模型通过：${passedPreferredModels.join("、")}）`
+        : `Claude 可用（测试模型：${primaryModel}）`;
+    const attemptSummary = buildAttemptSummary(attempts);
+
+    return {
+      ok: true,
+      message: attemptSummary ? `${successLabel}\n覆盖测试：${attemptSummary}` : successLabel,
+      statusCode: 200,
+      testedAt: new Date().toISOString(),
+      discoveredModel: primaryModel,
+      discoveredModels: discovered.ids,
+      attemptedModels: attempts,
+    };
+  }
 
   return {
-    ok: response.ok,
-    message: response.ok
-      ? `Claude 可用，测试模型：${discoveredModel}`
-      : extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`,
-    statusCode: response.status,
+    ok: false,
+    message: lastFailureMessage ?? "消息测试失败，请稍后再试。",
+    statusCode: lastStatusCode,
     testedAt: new Date().toISOString(),
-    discoveredModel,
+    discoveredModel: null,
     discoveredModels: discovered.ids,
+    attemptedModels: attempts,
   };
 }
 
-async function testOpenAiKey(key: ManagedKeyListItem): Promise<ManagedKeyTestResult> {
+async function testOpenAiKey(key: ManagedKeyListItem, globalPreferredModels: string[]): Promise<ManagedKeyTestResult> {
   const discovered = await discoverOpenAiModels(key);
-  const discoveredModel = pickModelForTest(key, discovered.ids);
+  const modelsToTest = buildModelsToTest(key, discovered.ids, globalPreferredModels);
 
   if (!discovered.response.ok) {
     return {
@@ -435,12 +582,13 @@ async function testOpenAiKey(key: ManagedKeyListItem): Promise<ManagedKeyTestRes
         `模型列表请求失败（HTTP ${discovered.response.status}）`,
       statusCode: discovered.response.status,
       testedAt: new Date().toISOString(),
-      discoveredModel,
+      discoveredModel: null,
       discoveredModels: discovered.ids,
+      attemptedModels: [],
     };
   }
 
-  if (!discoveredModel) {
+  if (modelsToTest.length === 0) {
     return {
       ok: true,
       message: "模型列表访问成功，但没有识别出可测试模型。",
@@ -448,38 +596,127 @@ async function testOpenAiKey(key: ManagedKeyListItem): Promise<ManagedKeyTestRes
       testedAt: new Date().toISOString(),
       discoveredModel: null,
       discoveredModels: discovered.ids,
+      attemptedModels: [],
     };
   }
 
-  const response = await fetch(joinBaseUrl(key.baseUrl, "/chat/completions"), {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${key.secret}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: discoveredModel,
-      max_tokens: 12,
-      messages: [{ role: "user", content: "ping" }],
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
+  const attempts: ManagedKeyTestResult["attemptedModels"] = [];
+  let lastFailureMessage: string | null = null;
+  let lastStatusCode: number | null = discovered.response.status;
+  let successfulModel: string | null = null;
+  let successfulPreferredModel: string | null = null;
 
-  const payload = (await response.json().catch(() => null)) as
-    | { choices?: Array<{ message?: { content?: string } }> }
-    | { error?: { message?: string } }
-    | null;
+  for (const candidate of modelsToTest) {
+    const response = await fetch(joinBaseUrl(key.baseUrl, "/chat/completions"), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key.secret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: candidate.model,
+        max_tokens: 12,
+        messages: [{ role: "user", content: "ping" }],
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: string } }> }
+      | { error?: { message?: string } }
+      | null;
+
+    if (response.ok) {
+      attempts.push({
+        model: candidate.model,
+        ok: true,
+        statusCode: response.status,
+        message: "测试成功",
+        source: candidate.source,
+      });
+      successfulModel ??= candidate.model;
+      if (candidate.source === "preferred") {
+        successfulPreferredModel ??= candidate.model;
+      }
+      continue;
+    }
+
+    lastFailureMessage = extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`;
+    lastStatusCode = response.status;
+    attempts.push({
+      model: candidate.model,
+      ok: false,
+      statusCode: response.status,
+      message: lastFailureMessage,
+      source: candidate.source,
+    });
+  }
+
+  const passedPreferredModels = attempts
+    .filter((attempt) => attempt.ok && attempt.source === "preferred")
+    .map((attempt) => attempt.model);
+
+  if (successfulModel) {
+    const primaryModel = successfulPreferredModel ?? successfulModel;
+    const successLabel =
+      passedPreferredModels.length > 0
+        ? `Codex 可用（全局优先模型通过：${passedPreferredModels.join("、")}）`
+        : `Codex 可用（测试模型：${primaryModel}）`;
+    const attemptSummary = buildAttemptSummary(attempts);
+
+    return {
+      ok: true,
+      message: attemptSummary ? `${successLabel}\n覆盖测试：${attemptSummary}` : successLabel,
+      statusCode: 200,
+      testedAt: new Date().toISOString(),
+      discoveredModel: primaryModel,
+      discoveredModels: discovered.ids,
+      attemptedModels: attempts,
+    };
+  }
 
   return {
-    ok: response.ok,
-    message: response.ok
-      ? `Codex 可用，测试模型：${discoveredModel}`
-      : extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`,
-    statusCode: response.status,
+    ok: false,
+    message: lastFailureMessage ?? "消息测试失败，请稍后再试。",
+    statusCode: lastStatusCode,
     testedAt: new Date().toISOString(),
-    discoveredModel,
+    discoveredModel: null,
     discoveredModels: discovered.ids,
+    attemptedModels: attempts,
   };
+}
+
+export async function getGlobalConfig(): Promise<GlobalConfig> {
+  const preferredRecord = await prisma.appConfig.findUnique({
+    where: { key: "preferredModels" },
+  });
+  const preferredModels = normalizeModelConfig(
+    parseJsonArray(preferredRecord?.value ?? null),
+  );
+
+  return { preferredModels };
+}
+
+export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<GlobalConfig> {
+  if (config.preferredModels !== undefined) {
+    await prisma.appConfig.upsert({
+      where: { key: "preferredModels" },
+      create: {
+        key: "preferredModels",
+        value: JSON.stringify(normalizeModelConfig(config.preferredModels)),
+      },
+      update: {
+        value: JSON.stringify(normalizeModelConfig(config.preferredModels)),
+      },
+    });
+  }
+
+  return getGlobalConfig();
+}
+
+async function getPreferredModels(): Promise<string[]> {
+  const config = await getGlobalConfig();
+  return config.preferredModels;
 }
 
 export async function listManagedKeys() {
@@ -618,9 +855,10 @@ export async function testManagedKey(id: string) {
   }
 
   const listItem = toListItem(key);
+  const globalPreferredModels = await getPreferredModels();
   const [anthropicResult, openAiResult] = await Promise.all([
-    runProtocolTest(listItem, "anthropic"),
-    runProtocolTest(listItem, "openai"),
+    runProtocolTest(listItem, "anthropic", globalPreferredModels),
+    runProtocolTest(listItem, "openai", globalPreferredModels),
   ]);
   const protocolResults = [anthropicResult, openAiResult];
   const claudeSummary = summarizeTagAvailability({
@@ -635,6 +873,8 @@ export async function testManagedKey(id: string) {
   const combinedMessage = buildCombinedTestMessage({
     claudeSummary,
     codexSummary,
+    anthropicResult,
+    openAiResult,
   });
 
   const discoveredModels = [...new Set([
@@ -672,7 +912,7 @@ export async function testManagedKey(id: string) {
     },
   });
 
-  const nextModel = key.model ?? result.discoveredModel;
+  const nextModel = result.discoveredModel ?? key.model;
 
   try {
     await prisma.managedKey.update({

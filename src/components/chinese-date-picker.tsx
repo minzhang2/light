@@ -4,6 +4,7 @@ import * as React from "react"
 
 import { Calendar } from "@/components/ui/calendar"
 import { DayDetailPanel } from "@/components/day-detail-panel"
+import type { CalendarNoteData } from "@/components/day-detail-panel"
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -38,17 +39,49 @@ function getToday() {
 
 interface ChineseDatePickerProps {
   markers?: DateMarker[]
+  userEmail?: string
 }
 
-export function ChineseDatePicker({ markers = [] }: ChineseDatePickerProps) {
+export function ChineseDatePicker({ markers: externalMarkers = [], userEmail = "" }: ChineseDatePickerProps) {
   const [date, setDate] = React.useState<Date | undefined>()
   const [displayMonth, setDisplayMonth] = React.useState(() => getToday())
+  const [notes, setNotes] = React.useState<CalendarNoteData[]>([])
+  const [fetchVersion, setFetchVersion] = React.useState(0)
 
   React.useEffect(() => {
     setDate(getToday())
   }, [])
 
+  // Fetch all notes for this user
+  React.useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const res = await fetch("/api/calendar-notes")
+        if (!res.ok) return
+        const json = (await res.json()) as { notes?: CalendarNoteData[] }
+        if (!cancelled && Array.isArray(json.notes)) {
+          setNotes(json.notes)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [fetchVersion])
+
   const lunarData = useLunarMonth(displayMonth)
+
+  // Convert notes to markers
+  const allMarkers = React.useMemo(() => {
+    const noteMarkers: DateMarker[] = notes.map((n) => ({
+      date: n.solarDate,
+      color: n.color,
+      label: n.note,
+    }))
+    return [...externalMarkers, ...noteMarkers]
+  }, [externalMarkers, notes])
 
   // Get selected date's lunar info
   const selectedLunarInfo = React.useMemo(() => {
@@ -57,10 +90,17 @@ export function ChineseDatePicker({ markers = [] }: ChineseDatePickerProps) {
     return lunarData.get(key) ?? getLunarDayInfo(date)
   }, [date, lunarData])
 
+  // Notes for the selected date
+  const selectedDateNotes = React.useMemo(() => {
+    if (!date) return []
+    const key = toISODate(date)
+    return notes.filter((n) => n.solarDate === key)
+  }, [date, notes])
+
   return (
     <SidebarGroup className="px-0">
       <SidebarGroupContent className="w-full">
-        <LunarDataContext.Provider value={{ lunarData, markers }}>
+        <LunarDataContext.Provider value={{ lunarData, markers: allMarkers }}>
           <Calendar
             mode="single"
             selected={date}
@@ -85,7 +125,13 @@ export function ChineseDatePicker({ markers = [] }: ChineseDatePickerProps) {
           />
         </LunarDataContext.Provider>
         {date && selectedLunarInfo && (
-          <DayDetailPanel info={selectedLunarInfo} date={date} />
+          <DayDetailPanel
+            info={selectedLunarInfo}
+            date={date}
+            notes={selectedDateNotes}
+            userEmail={userEmail}
+            onNotesChanged={() => setFetchVersion((v) => v + 1)}
+          />
         )}
       </SidebarGroupContent>
     </SidebarGroup>

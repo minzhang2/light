@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { ManagedKeyManager } from "@/components/managed-key-manager";
-import { listManagedKeys } from "@/features/managed-keys/service";
+import { getGlobalConfig, listManagedKeys } from "@/features/managed-keys/service";
 
 export const metadata: Metadata = {
   title: "Key 管理",
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 
 export default async function DashboardKeysPage() {
   const keys = await listManagedKeys();
+  const initialConfig = await getGlobalConfig();
 
   return (
     <>
@@ -18,7 +19,7 @@ export default async function DashboardKeysPage() {
         title="Key 管理"
         description="搜索、复制、导入并测试 Claude / Codex key 的可用性。"
       />
-      <ManagedKeyManager initialKeys={keys} />
+      <ManagedKeyManager initialKeys={keys} initialConfig={initialConfig} />
     </>
   );
 }

@@ -4,6 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import type { ChatSessionListItem } from "@/features/chat/types";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+} from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 function groupSessions(sessions: ChatSessionListItem[]) {
@@ -50,6 +64,7 @@ export function ChatHistoryList({
 }) {
   const [sessions, setSessions] = useState<ChatSessionListItem[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -84,6 +99,13 @@ export function ChatHistoryList({
 
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
+    setPendingDeleteId(id);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
     await fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
     setSessions((prev) => prev.filter((s) => s.id !== id));
     if (id === activeSessionId) {
@@ -126,25 +148,46 @@ export function ChatHistoryList({
                 )}
               >
                 <span className="flex-1 truncate">{s.title}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => void handleDelete(s.id, e)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.stopPropagation();
-                      void handleDelete(s.id, e as unknown as React.MouseEvent);
-                    }
-                  }}
-                  className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:hidden md:group-hover:flex"
-                >
-                  <Trash2Icon className="h-3.5 w-3.5" />
-                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => void handleDelete(s.id, e)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                              void handleDelete(s.id, e as unknown as React.MouseEvent);
+                            }
+                          }}
+                          className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:hidden md:group-hover:flex"
+                        />
+                      }
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">删除对话</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </button>
             ))}
           </div>
         ))}
       </div>
+      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除对话</AlertDialogTitle>
+            <AlertDialogDescription>确定要删除这个对话吗？此操作无法撤销。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="outline" onClick={() => setPendingDeleteId(null)}>取消</Button>
+            <Button variant="destructive" onClick={() => void confirmDelete()}>删除</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -20,10 +20,10 @@ import {
 const RIGHT_SIDEBAR_WIDTH = "16rem"
 const RIGHT_SIDEBAR_WIDTH_MOBILE = "min(24rem, calc(100vw - 1rem))"
 
-function SidebarCalendarSection() {
+function SidebarCalendarSection({ userEmail }: { userEmail: string }) {
   return (
     <div className="px-3 py-3">
-      <ChineseDatePicker />
+      <ChineseDatePicker userEmail={userEmail} />
     </div>
   )
 }
@@ -56,7 +56,7 @@ export function SidebarRight({
               <NavUserPanel user={user} />
             </SidebarHeader>
             <SidebarContent className="gap-0">
-              <SidebarCalendarSection />
+              <SidebarCalendarSection userEmail={user.email} />
             </SidebarContent>
           </div>
         </SheetContent>
@@ -99,7 +99,7 @@ export function SidebarRight({
             <NavUser user={user} />
           </SidebarHeader>
           <SidebarContent className="gap-0">
-            <SidebarCalendarSection />
+            <SidebarCalendarSection userEmail={user.email} />
           </SidebarContent>
         </div>
       </div>

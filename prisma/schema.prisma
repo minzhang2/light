@@ -148,3 +148,28 @@ model TempMailbox {
 
   @@index([userId, accountKey, createdAt])
 }
+
+model CalendarNote {
+  id              String   @id @default(cuid())
+  userId          String
+  solarDate       String
+  lunarMonth      Int
+  lunarDay        Int
+  isLeapMonth     Boolean  @default(false)
+  note            String
+  color           String   @default("#f97316")
+  reminderEnabled Boolean  @default(false)
+  reminderEmail   String?
+  lastReminderYear Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, solarDate])
+  @@index([reminderEnabled, lunarMonth, lunarDay])
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

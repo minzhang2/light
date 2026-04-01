@@ -13,6 +13,7 @@ import {
   FlaskConicalOffIcon,
   PinIcon,
   PinOffIcon,
+  Settings2Icon,
   Trash2Icon,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type {
+  GlobalConfig,
   ManagedKeyListItem,
   ManagedKeyTestResult,
   ManagedKeyUpdateInput,
@@ -597,14 +599,6 @@ function ManagedKeyCard({
               </label>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">默认模型</span>
-                  <Input
-                    value={editDraft.model}
-                    onChange={(event) => onChangeEditDraft({ model: event.target.value })}
-                    placeholder="可留空"
-                  />
-                </label>
-                <label className="space-y-1">
                   <span className="text-xs font-medium text-foreground/60">启动命令</span>
                   <Select
                     value={editDraft.launchCommand || EMPTY_LAUNCH_COMMAND}
@@ -663,11 +657,19 @@ function ManagedKeyCard({
 
 export function ManagedKeyManager({
   initialKeys,
+  initialConfig,
 }: {
   initialKeys: ManagedKeyListItem[];
+  initialConfig?: GlobalConfig;
 }) {
   const { toast, dismiss } = useToast();
   const [keys, setKeys] = useState(initialKeys);
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig>(
+    initialConfig ?? { preferredModels: [] },
+  );
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState("");
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<KeyFilter>("all");
   const [rawImport, setRawImport] = useState("");
@@ -1111,6 +1113,42 @@ export function ManagedKeyManager({
     }
   }
 
+  async function handleSaveSettings() {
+    setIsSavingSettings(true);
+
+    try {
+      const preferredModels = settingsDraft
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const response = await fetch("/api/keys/config", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ preferredModels }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { config?: GlobalConfig; message?: string }
+        | null;
+
+      if (!response.ok || !payload?.config) {
+        throw new Error(payload?.message ?? "保存失败。");
+      }
+
+      setGlobalConfig(payload.config);
+      setShowSettings(false);
+      toast({ tone: "success", message: "全局配置已保存。" });
+    } catch (error) {
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "保存失败。",
+      });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  }
+
   async function handleBatchTest() {
     if (testableFilteredKeys.length === 0 || isBatchTesting) {
       return;
@@ -1228,6 +1266,20 @@ export function ManagedKeyManager({
               导入
               {showImport ? <ChevronUpIcon className="ml-1 h-4 w-4" /> : <ChevronDownIcon className="ml-1 h-4 w-4" />}
             </Button>
+            <Button
+              type="button"
+              variant={showSettings ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (!showSettings) {
+                  setSettingsDraft((globalConfig?.preferredModels ?? []).join(", "));
+                }
+                setShowSettings(!showSettings);
+              }}
+            >
+              <Settings2Icon className="h-4 w-4" />
+              设置
+            </Button>
           </div>
         </div>
       </div>
@@ -1249,6 +1301,26 @@ export function ManagedKeyManager({
             >
               {isImporting ? "导入中..." : "导入并合并"}
             </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Global settings */}
+      {showSettings ? (
+        <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
+          <h3 className="text-sm font-semibold">全局测试配置</h3>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-foreground/60">优先测试模型（逗号分隔）</span>
+            <Input
+              value={settingsDraft}
+              onChange={(event) => setSettingsDraft(event.target.value)}
+              placeholder="如：claude-sonnet-4-5, gpt-4o"
+            />
+            <p className="text-xs text-muted-foreground">测试时优先使用列表中的模型，适用于所有 key。</p>
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setShowSettings(false)} disabled={isSavingSettings}>取消</Button>
+            <Button type="button" size="sm" onClick={handleSaveSettings} disabled={isSavingSettings}>{isSavingSettings ? "保存中..." : "保存"}</Button>
           </div>
         </div>
       ) : null}

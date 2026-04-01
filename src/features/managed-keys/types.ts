@@ -47,6 +47,13 @@ export type ManagedKeyTestResult = {
   testedAt: string;
   discoveredModel: string | null;
   discoveredModels: string[];
+  attemptedModels: Array<{
+    model: string;
+    ok: boolean;
+    statusCode: number | null;
+    message: string;
+    source: "preferred" | "fallback";
+  }>;
 };
 
 export type ManagedKeyUpdateInput = {
@@ -57,4 +64,8 @@ export type ManagedKeyUpdateInput = {
   launchCommand?: ManagedKeyLaunchCommand;
   isTestable?: boolean;
   isPinned?: boolean;
+};
+
+export type GlobalConfig = {
+  preferredModels: string[];
 };
