@@ -39,6 +39,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 const DOMAINS = [
@@ -91,6 +92,7 @@ function MailboxSidebar({
   onSelectMailbox,
   onAccountChange,
   accountIndex,
+  onCopyMailbox,
 }: {
   accounts: MailAccount[];
   activeMailboxId: number | null;
@@ -102,6 +104,7 @@ function MailboxSidebar({
   onSelectMailbox: (mailbox: Mailbox) => void;
   onAccountChange: (index: number) => void;
   accountIndex: number;
+  onCopyMailbox: (email: string) => void;
 }) {
   const selectedLabel =
     accounts.find((a) => a.index === accountIndex)?.label ?? "请选择用户";
@@ -167,9 +170,7 @@ function MailboxSidebar({
                           size="icon"
                           className="size-7 shrink-0"
                           aria-label={`复制 ${mailbox.email}`}
-                          onClick={() => {
-                            void navigator.clipboard.writeText(mailbox.email);
-                          }}
+                          onClick={() => onCopyMailbox(mailbox.email)}
                         />
                       }
                     >
@@ -448,6 +449,7 @@ function findMailboxById(mailboxId: number | null, mailboxes: Mailbox[]) {
 }
 
 export function MailContainer() {
+  const { toast } = useToast();
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [activeMailboxId, setActiveMailboxId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -466,6 +468,15 @@ export function MailContainer() {
   const addLog = useCallback((type: LogEntry["type"], message: string) => {
     setLogs((prev) => [{ time: now(), type, message }, ...prev]);
   }, []);
+
+  const handleCopyMailbox = useCallback(async (email: string) => {
+    try {
+      await navigator.clipboard.writeText(email);
+      toast({ tone: "success", message: "邮箱已复制" });
+    } catch {
+      toast({ tone: "error", message: "复制邮箱失败" });
+    }
+  }, [toast]);
 
   useEffect(() => {
     fetch("/api/mail/accounts")
