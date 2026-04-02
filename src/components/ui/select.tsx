@@ -95,6 +95,7 @@ function SelectContent({
 function SelectItem({
   className,
   children,
+  label,
   ...props
 }: SelectPrimitive.Item.Props) {
   return (
@@ -104,11 +105,23 @@ function SelectItem({
         "relative flex cursor-default items-center gap-2 rounded-md py-2 pr-8 pl-2 text-sm outline-hidden select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground",
         className,
       )}
+      label={label}
       {...props}
     >
-      <SelectPrimitive.ItemText data-slot="select-item-text">
-        {children}
-      </SelectPrimitive.ItemText>
+      {typeof label === "string" ? (
+        <>
+          <SelectPrimitive.ItemText data-slot="select-item-text" className="sr-only">
+            {label}
+          </SelectPrimitive.ItemText>
+          <span aria-hidden="true" className="contents">
+            {children}
+          </span>
+        </>
+      ) : (
+        <SelectPrimitive.ItemText data-slot="select-item-text">
+          {children}
+        </SelectPrimitive.ItemText>
+      )}
       <span
         className="pointer-events-none absolute right-2 flex items-center justify-center"
         data-slot="select-item-indicator"

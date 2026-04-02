@@ -281,14 +281,16 @@ function KeySupportBadges({
   keyOption: ChatKeyOption;
   className?: string;
 }) {
+  const inferredClaude = keyOption.models.some((model) => /(claude|sonnet|opus|haiku)/i.test(model));
+  const inferredCodex = keyOption.models.some((model) => !/(claude|sonnet|opus|haiku)/i.test(model));
   const showClaude =
-    typeof keyOption.supportsClaude === "boolean"
-      ? keyOption.supportsClaude
-      : keyOption.group === "claude";
+    (typeof keyOption.supportsClaude === "boolean" ? keyOption.supportsClaude : false) ||
+    inferredClaude ||
+    keyOption.group === "claude";
   const showCodex =
-    typeof keyOption.supportsCodex === "boolean"
-      ? keyOption.supportsCodex
-      : keyOption.group === "codex";
+    (typeof keyOption.supportsCodex === "boolean" ? keyOption.supportsCodex : false) ||
+    inferredCodex ||
+    keyOption.group === "codex";
 
   return (
     <span className={cn("inline-flex items-center gap-1", className)}>
@@ -1047,7 +1049,12 @@ export function ChatPlayground({
                   </SelectTrigger>
                   <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[calc(100vw-2rem)]">
                     {keys.map((item) => (
-                      <SelectItem key={item.id} value={item.id} className="whitespace-nowrap">
+                      <SelectItem
+                        key={item.id}
+                        value={item.id}
+                        label={item.name}
+                        className="whitespace-nowrap"
+                      >
                         <span className="inline-flex items-center gap-2">
                           <span>{item.name}</span>
                           <KeySupportBadges keyOption={item} />

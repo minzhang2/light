@@ -354,12 +354,12 @@ function getSupportedTags(message: string | null) {
   }
 
   const normalizedMessage = normalizeProviderLabels(message);
-  const hasClaude = /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(
-    normalizedMessage,
-  );
-  const hasCodex = /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(
-    normalizedMessage,
-  );
+  const hasClaude =
+    /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(normalizedMessage) ||
+    /Claude\s*模型测试：(?!(?:未验证|无可测模型))/.test(normalizedMessage);
+  const hasCodex =
+    /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(normalizedMessage) ||
+    /Codex\s*模型测试：(?!(?:未验证|无可测模型))/.test(normalizedMessage);
 
   return {
     anthropic: hasClaude,
