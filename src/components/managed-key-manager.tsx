@@ -273,6 +273,10 @@ function TestMessage({
     );
   }
 
+  function renderHighlightedInline(text: string) {
+    return renderHighlightedLine(text.replace(/\n+/g, " "), 0);
+  }
+
   return (
     <div className={`rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
       {expanded || !isCollapsible ? (
@@ -295,7 +299,9 @@ function TestMessage({
         </div>
       ) : (
         <div className="flex items-center gap-1.5">
-          <p className="min-w-0 flex-1 truncate">{normalizedMessage}</p>
+          <div className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+            {renderHighlightedInline(normalizedMessage)}
+          </div>
           <Button
             type="button"
             variant="ghost"
