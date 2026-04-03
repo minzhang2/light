@@ -232,6 +232,19 @@ export function NotesWorkspace({
     await saveDocument(activeDocument);
   }
 
+  async function handleToggleViewMode() {
+    if (viewMode === "preview") {
+      setViewMode("edit");
+      return;
+    }
+
+    if (activeDocument && isDocumentDirty(activeDocument) && saveState !== "saving") {
+      await saveDocument(activeDocument);
+    }
+
+    setViewMode("preview");
+  }
+
   async function handleCreateDocument() {
     setBusyAction("creating");
     try {
@@ -734,11 +747,7 @@ export function NotesWorkspace({
                     <Button
                       variant="default"
                       size="sm"
-                      onClick={() =>
-                        setViewMode((currentMode) =>
-                          currentMode === "edit" ? "preview" : "edit",
-                        )
-                      }
+                      onClick={() => void handleToggleViewMode()}
                     >
                       {viewMode === "edit" ? <EyeIcon /> : <PencilLineIcon />}
                       {viewMode === "edit" ? "预览" : "编辑"}
