@@ -267,62 +267,169 @@ function extractErrorMessage(payload: unknown) {
 }
 
 function extractAnthropicText(payload: unknown) {
-  if (!payload || typeof payload !== "object" || !("content" in payload)) {
+  if (!payload || typeof payload !== "object") {
     return "";
   }
 
-  const content = (payload as { content?: Array<{ type?: string; text?: string }> }).content;
+  const directContent = extractTextFromValue(
+    (payload as { content?: unknown }).content,
+  );
 
-  if (!Array.isArray(content)) {
+  if (directContent) {
+    return directContent;
+  }
+
+  return extractCommonPayloadText(payload);
+}
+
+function extractTextFromValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractTextFromValue(item))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  if (!value || typeof value !== "object") {
     return "";
   }
 
-  return content
-    .filter((item) => item?.type === "text" && typeof item.text === "string")
-    .map((item) => item.text)
-    .join("\n")
-    .trim();
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.output_text === "string") {
+    return record.output_text.trim();
+  }
+
+  if (typeof record.completion === "string") {
+    return record.completion.trim();
+  }
+
+  if (typeof record.text === "string") {
+    return record.text.trim();
+  }
+
+  if (record.text && typeof record.text === "object") {
+    const nestedText = extractTextFromValue(record.text);
+    if (nestedText) {
+      return nestedText;
+    }
+  }
+
+  if (record.delta && typeof record.delta === "object") {
+    const deltaText = extractTextFromValue(record.delta);
+    if (deltaText) {
+      return deltaText;
+    }
+  }
+
+  if (record.message && typeof record.message === "object") {
+    const messageText = extractTextFromValue(record.message);
+    if (messageText) {
+      return messageText;
+    }
+  }
+
+  if (record.content) {
+    const contentText = extractTextFromValue(record.content);
+    if (contentText) {
+      return contentText;
+    }
+  }
+
+  if (record.output) {
+    const outputText = extractTextFromValue(record.output);
+    if (outputText) {
+      return outputText;
+    }
+  }
+
+  if (record.parts) {
+    const partsText = extractTextFromValue(record.parts);
+    if (partsText) {
+      return partsText;
+    }
+  }
+
+  return "";
 }
 
 function extractOpenAiText(payload: unknown) {
-  if (!payload || typeof payload !== "object" || !("choices" in payload)) {
+  if (!payload || typeof payload !== "object") {
     return "";
   }
 
-  const choices = (payload as {
-    choices?: Array<{
-      message?: {
-        content?:
-          | string
-          | Array<{ type?: string; text?: string | { value?: string } }>;
-      };
-    }>;
-  }).choices;
+  const choices = (payload as { choices?: Array<{ message?: unknown; delta?: unknown }> }).choices;
 
-  const content = choices?.[0]?.message?.content;
+  if (Array.isArray(choices)) {
+    for (const choice of choices) {
+      const messageText = extractTextFromValue(choice?.message);
+      if (messageText) {
+        return messageText;
+      }
 
-  if (typeof content === "string") {
-    return content.trim();
+      const deltaText = extractTextFromValue(choice?.delta);
+      if (deltaText) {
+        return deltaText;
+      }
+    }
   }
 
-  if (!Array.isArray(content)) {
+  const directOutputText = extractTextFromValue(
+    (payload as { output_text?: unknown }).output_text,
+  );
+  if (directOutputText) {
+    return directOutputText;
+  }
+
+  const directCompletionText = extractTextFromValue(
+    (payload as { completion?: unknown }).completion,
+  );
+  if (directCompletionText) {
+    return directCompletionText;
+  }
+
+  const directOutput = extractTextFromValue((payload as { output?: unknown }).output);
+  if (directOutput) {
+    return directOutput;
+  }
+
+  const directCandidates = extractTextFromValue(
+    (payload as { candidates?: unknown }).candidates,
+  );
+  if (directCandidates) {
+    return directCandidates;
+  }
+
+  return extractCommonPayloadText(payload);
+}
+
+function extractCommonPayloadText(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
     return "";
   }
 
-  return content
-    .map((item) => {
-      if (!item || item.type !== "text") {
-        return "";
-      }
+  const record = payload as {
+    content?: unknown;
+    message?: unknown;
+    output?: unknown;
+    output_text?: unknown;
+    completion?: unknown;
+    candidates?: unknown;
+  };
 
-      if (typeof item.text === "string") {
-        return item.text;
-      }
-
-      return item.text?.value ?? "";
-    })
-    .join("\n")
-    .trim();
+  return (
+    extractTextFromValue(record.content) ||
+    extractTextFromValue(record.message) ||
+    extractTextFromValue(record.output) ||
+    extractTextFromValue(record.output_text) ||
+    extractTextFromValue(record.completion) ||
+    extractTextFromValue(record.candidates)
+  );
 }
 
 function normalizeProviderLabels(message: string) {
