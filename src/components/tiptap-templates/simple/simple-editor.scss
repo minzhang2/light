@@ -78,8 +78,96 @@ body,
   padding: 2rem 2rem 30vh;
 }
 
+.simple-editor-fallback {
+  flex: 1;
+  width: 100%;
+  min-height: 100%;
+  padding: 2rem 2rem 30vh;
+  font-family: "DM Sans", sans-serif;
+  line-height: 1.75;
+  color: var(--tt-theme-text);
+
+  > *:first-child {
+    margin-top: 0;
+  }
+
+  > *:last-child {
+    margin-bottom: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 0 0 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  p,
+  ul,
+  ol,
+  blockquote,
+  pre {
+    margin: 0 0 1rem;
+  }
+
+  ul,
+  ol {
+    padding-left: 1.5rem;
+  }
+
+  ul {
+    list-style: disc;
+  }
+
+  ol {
+    list-style: decimal;
+  }
+
+  blockquote {
+    border-left: 2px solid color-mix(in srgb, currentColor 18%, transparent);
+    padding-left: 1rem;
+    color: color-mix(in srgb, currentColor 72%, transparent);
+  }
+
+  code {
+    border-radius: 0.375rem;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 0.125rem 0.375rem;
+  }
+
+  pre {
+    overflow-x: auto;
+    border-radius: 1rem;
+    background: #09090b;
+    padding: 0.875rem 1rem;
+    color: #fafafa;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
+}
+
+.simple-editor-fallback-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
 @media screen and (max-width: 480px) {
-  .simple-editor-content .tiptap.ProseMirror.simple-editor {
+  .simple-editor-content .tiptap.ProseMirror.simple-editor,
+  .simple-editor-fallback {
     padding: 1rem 1.5rem 30vh;
   }
 }

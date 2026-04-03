@@ -67,6 +67,7 @@ import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
 
 // --- Components ---
 import { ThemeToggle } from "@/components/tiptap-templates/simple/theme-toggle"
+import { Skeleton } from "@/components/ui/skeleton"
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
@@ -75,6 +76,53 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
 import defaultContent from "@/components/tiptap-templates/simple/data/content.json"
+
+function getStaticEditorMarkup(content: Content | string) {
+  if (typeof content !== "string") {
+    return null
+  }
+
+  const trimmed = content.trim()
+
+  if (!trimmed || trimmed === "<p></p>") {
+    return null
+  }
+
+  return trimmed
+}
+
+function EditorLoadingFallback({
+  content,
+  editable,
+}: {
+  content: Content | string
+  editable: boolean
+}) {
+  const markup = getStaticEditorMarkup(content)
+
+  if (markup) {
+    return (
+      <div className="simple-editor-content">
+        <div
+          aria-hidden={editable || undefined}
+          className="simple-editor-fallback"
+          dangerouslySetInnerHTML={{ __html: markup }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="simple-editor-content">
+      <div className="simple-editor-fallback simple-editor-fallback-empty">
+        <Skeleton className="h-8 w-36" />
+        <Skeleton className="h-4 w-full max-w-[32rem]" />
+        <Skeleton className="h-4 w-full max-w-[28rem]" />
+        <Skeleton className="h-4 w-full max-w-[30rem]" />
+      </div>
+    </div>
+  )
+}
 
 const MainToolbarContent = ({
   onHighlighterClick,
@@ -203,6 +251,7 @@ export function SimpleEditor({
   const [toolbarHeight, setToolbarHeight] = useState(0)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const toolbarView = isMobile ? mobileView : "main"
+  const mobileToolbarReady = !isMobile || height > 0
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -316,14 +365,17 @@ export function SimpleEditor({
   return (
     <div className="simple-editor-wrapper">
       <EditorContext.Provider value={{ editor }}>
-        {showToolbar ? (
+        {showToolbar && editor ? (
           <Toolbar
             ref={toolbarRef}
             style={{
-              ...(isMobile
+              ...(isMobile && mobileToolbarReady
                 ? {
                     bottom: `calc(100% - ${height - rect.y}px)`,
                   }
+                : {}),
+              ...(isMobile && !mobileToolbarReady
+                ? { visibility: "hidden" as const }
                 : {}),
             }}
           >
@@ -342,11 +394,15 @@ export function SimpleEditor({
           </Toolbar>
         ) : null}
 
-        <EditorContent
-          editor={editor}
-          role="presentation"
-          className="simple-editor-content"
-        />
+        {editor ? (
+          <EditorContent
+            editor={editor}
+            role="presentation"
+            className="simple-editor-content"
+          />
+        ) : (
+          <EditorLoadingFallback content={content} editable={editable} />
+        )}
       </EditorContext.Provider>
     </div>
   )

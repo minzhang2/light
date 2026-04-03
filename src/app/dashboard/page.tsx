@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { KeyRoundIcon, MessageCircleIcon, ShieldIcon, TicketIcon } from "lucide-react";
+import {
+  BookTextIcon,
+  KeyRoundIcon,
+  MailIcon,
+  MessageCircleIcon,
+  ShieldIcon,
+  TicketIcon,
+} from "lucide-react";
 
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
 import { Button } from "@/components/ui/button";
@@ -39,10 +46,22 @@ async function DashboardPageContent({
             description="直接使用已验证的 key 和模型发起多轮对话。"
           />
           <QuickLink
+            href="/dashboard/notes"
+            icon={<BookTextIcon className="h-5 w-5" />}
+            title="笔记"
+            description="记录富文本笔记，支持自动保存、分享和预览。"
+          />
+          <QuickLink
             href="/dashboard/keys"
             icon={<KeyRoundIcon className="h-5 w-5" />}
             title="Key 管理"
             description="导入、搜索、测试和导出 Claude / Codex key。"
+          />
+          <QuickLink
+            href="/dashboard/mail"
+            icon={<MailIcon className="h-5 w-5" />}
+            title="临时邮箱"
+            description="分配临时邮箱并获取验证码。"
           />
           {canAccessInvites && (
             <QuickLink

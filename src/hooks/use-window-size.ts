@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useState } from "react"
 import { useThrottledCallback } from "@/hooks/use-throttled-callback"
 
 export interface WindowSizeState {
@@ -28,6 +28,17 @@ export interface WindowSizeState {
   scale: number
 }
 
+const initialWindowSize: WindowSizeState = {
+  width: 0,
+  height: 0,
+  offsetTop: 0,
+  offsetLeft: 0,
+  scale: 0,
+}
+
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect
+
 /**
  * Hook that tracks the window's visual viewport dimensions, position, and provides
  * a CSS transform for positioning elements.
@@ -39,13 +50,7 @@ export interface WindowSizeState {
  * @returns An object containing viewport properties and a CSS transform string
  */
 export function useWindowSize(): WindowSizeState {
-  const [windowSize, setWindowSize] = useState<WindowSizeState>({
-    width: 0,
-    height: 0,
-    offsetTop: 0,
-    offsetLeft: 0,
-    scale: 0,
-  })
+  const [windowSize, setWindowSize] = useState<WindowSizeState>(initialWindowSize)
 
   const handleViewportChange = useThrottledCallback(() => {
     if (typeof window === "undefined") return
@@ -76,7 +81,7 @@ export function useWindowSize(): WindowSizeState {
     })
   }, 200)
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const visualViewport = window.visualViewport
     if (!visualViewport) return
 

@@ -1,8 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useState } from "react"
 
 type BreakpointMode = "min" | "max"
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect
 
 /**
  * Hook to detect whether the current viewport matches a given breakpoint rule.
@@ -16,7 +18,7 @@ export function useIsBreakpoint(
 ) {
   const [matches, setMatches] = useState<boolean | undefined>(undefined)
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const query =
       mode === "min"
         ? `(min-width: ${breakpoint}px)`
@@ -25,11 +27,9 @@ export function useIsBreakpoint(
     const mql = window.matchMedia(query)
     const onChange = (e: MediaQueryListEvent) => setMatches(e.matches)
 
-    // Set initial value
     setMatches(mql.matches)
-
-    // Add listener
     mql.addEventListener("change", onChange)
+
     return () => mql.removeEventListener("change", onChange)
   }, [mode, breakpoint])
 

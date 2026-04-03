@@ -9,6 +9,7 @@ import {
   FilePlus2Icon,
   FileTextIcon,
   LockIcon,
+  MenuIcon,
   PencilLineIcon,
   PinIcon,
   Share2Icon,
@@ -27,6 +28,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import {
   Tooltip,
@@ -34,6 +42,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 interface NoteDocument {
@@ -59,7 +68,10 @@ export function NotesWorkspace({
   initialDocuments: NoteDocument[];
 }) {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [documents, setDocuments] = useState(initialDocuments);
+  const [clientOrigin, setClientOrigin] = useState("");
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(
     initialDocuments[0]?.id ?? null,
   );
@@ -68,9 +80,7 @@ export function NotesWorkspace({
     initialDocuments.length > 0 ? "saved" : "idle",
   );
   const [saveMessage, setSaveMessage] = useState(
-    initialDocuments[0]?.updatedAt
-      ? formatSavedLabel(initialDocuments[0].updatedAt)
-      : "新建一篇笔记开始记录",
+    initialDocuments.length > 0 ? "已保存" : "新建一篇笔记开始记录",
   );
   const [busyAction, setBusyAction] = useState<"creating" | "deleting" | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
@@ -93,15 +103,15 @@ export function NotesWorkspace({
     documents.find((document) => document.id === pendingDeleteId) ?? null;
   const pendingResaveRef = useRef(false);
   const activeShareUrl = activeDocument?.shareToken
-    ? buildShareUrl(activeDocument.shareToken)
+    ? buildShareUrl(activeDocument.shareToken, clientOrigin)
     : null;
 
-  function buildShareUrl(shareToken: string) {
-    if (typeof window === "undefined") {
+  function buildShareUrl(shareToken: string, origin = clientOrigin) {
+    if (!origin) {
       return `/share/note/${shareToken}`;
     }
 
-    return `${window.location.origin}/share/note/${shareToken}`;
+    return `${origin}/share/note/${shareToken}`;
   }
 
   function isDocumentDirty(document: NoteDocument) {
@@ -485,6 +495,9 @@ export function NotesWorkspace({
     startTransition(() => {
       setActiveId(document.id);
     });
+    if (isMobile) {
+      setMobileSidebarOpen(false);
+    }
 
     setSaveState("saved");
     setSaveMessage(
@@ -500,6 +513,28 @@ export function NotesWorkspace({
     : saveState === "saving" || isActiveDirty
       ? CloudIcon
       : LockIcon;
+
+  useEffect(() => {
+    setClientOrigin(window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    if (saveState === "saving" || saveState === "error" || isActiveDirty) {
+      return;
+    }
+
+    setSaveMessage(
+      activeDocument?.updatedAt
+        ? formatSavedLabel(activeDocument.updatedAt)
+        : "新建一篇笔记开始记录",
+    );
+  }, [activeDocument?.id, activeDocument?.updatedAt, isActiveDirty, saveState]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileSidebarOpen(false);
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     if (!activeDocument || !isActiveDirty || saveState === "saving") {
@@ -539,6 +574,111 @@ export function NotesWorkspace({
     };
   }, [activeDocument, isActiveDirty, saveState]);
 
+  const notesSidebar = (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <div className="p-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start gap-2"
+          onClick={() => void handleCreateDocument()}
+          disabled={busyAction === "creating"}
+        >
+          <FilePlus2Icon />
+          新建笔记
+        </Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-2 pb-4">
+        {documents.length === 0 ? (
+          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+            暂无笔记
+          </p>
+        ) : (
+          groupDocuments(documents).map((group) => (
+            <div key={group.label} className="mb-3">
+              <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                {group.label}
+              </p>
+              {group.items.map((document) => (
+                <button
+                  key={document.id}
+                  type="button"
+                  onClick={() => handleSelectDocument(document)}
+                  className={cn(
+                    "group my-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent",
+                    document.id === activeId && "bg-accent font-medium",
+                  )}
+                >
+                  <span className="flex-1 truncate">
+                    {document.title || "未命名笔记"}
+                  </span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleTogglePinned(document);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                void handleTogglePinned(document);
+                              }
+                            }}
+                            className={cn(
+                              "flex shrink-0 rounded p-0.5",
+                              document.isPinned
+                                ? "text-primary"
+                                : "text-muted-foreground hover:text-foreground md:opacity-0 md:group-hover:opacity-100",
+                            )}
+                          />
+                        }
+                      >
+                        <PinIcon className="h-3.5 w-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {document.isPinned ? "取消置顶" : "置顶笔记"}
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPendingDeleteId(document.id);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.stopPropagation();
+                                setPendingDeleteId(document.id);
+                              }
+                            }}
+                            className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
+                          />
+                        }
+                      >
+                        <Trash2Icon className="h-3.5 w-3.5" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top">删除笔记</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </button>
+              ))}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-svh flex-col">
       <DashboardPageHeader
@@ -548,107 +688,8 @@ export function NotesWorkspace({
 
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="grid h-full min-h-0 gap-0 md:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="flex min-h-0 flex-col border-b border-border/70 bg-background md:border-r md:border-b-0">
-            <div className="p-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => void handleCreateDocument()}
-                disabled={busyAction === "creating"}
-              >
-                <FilePlus2Icon />
-                新建笔记
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-2 pb-4">
-              {documents.length === 0 ? (
-                <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-                  暂无笔记
-                </p>
-              ) : (
-                groupDocuments(documents).map((group) => (
-                  <div key={group.label} className="mb-3">
-                    <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {group.label}
-                    </p>
-                    {group.items.map((document) => (
-                      <button
-                        key={document.id}
-                        type="button"
-                        onClick={() => handleSelectDocument(document)}
-                        className={cn(
-                          "group flex w-full items-center gap-2 rounded-md my-1 px-2 py-1.5 text-left text-sm hover:bg-accent",
-                          document.id === activeId && "bg-accent font-medium",
-                        )}
-                      >
-                        <span className="flex-1 truncate">
-                          {document.title || "未命名笔记"}
-                        </span>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    void handleTogglePinned(document);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.stopPropagation();
-                                      void handleTogglePinned(document);
-                                    }
-                                  }}
-                                  className={cn(
-                                    "flex shrink-0 rounded p-0.5",
-                                    document.isPinned
-                                      ? "text-primary"
-                                      : "text-muted-foreground hover:text-foreground md:opacity-0 md:group-hover:opacity-100",
-                                  )}
-                                />
-                              }
-                            >
-                              <PinIcon className="h-3.5 w-3.5" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              {document.isPinned ? "取消置顶" : "置顶笔记"}
-                            </TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <span
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPendingDeleteId(document.id);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" || e.key === " ") {
-                                      e.stopPropagation();
-                                      setPendingDeleteId(document.id);
-                                    }
-                                  }}
-                                  className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
-                                />
-                              }
-                            >
-                              <Trash2Icon className="h-3.5 w-3.5" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top">删除笔记</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </button>
-                    ))}
-                  </div>
-                ))
-              )}
-            </div>
+          <aside className="hidden min-h-0 border-r border-border/70 bg-background md:flex md:flex-col">
+            {notesSidebar}
           </aside>
 
           <section className="min-h-0 overflow-y-auto bg-background">
@@ -672,16 +713,26 @@ export function NotesWorkspace({
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-4 md:px-6">
-                  <div className="min-w-0 flex flex-1 flex-wrap items-center gap-3">
-                    <Input
-                      value={activeDocument.title}
-                      onChange={(event) =>
-                        updateActiveDocument({ title: event.target.value })
-                      }
-                      className="h-auto min-w-[240px] flex-1 border-0 bg-transparent px-0 py-0 text-3xl font-semibold shadow-none focus-visible:ring-0"
-                      placeholder="输入笔记标题"
-                    />
+                <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-4 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-6">
+                  <div className="min-w-0 flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMobileSidebarOpen(true)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground md:hidden"
+                        aria-label="打开笔记列表"
+                      >
+                        <MenuIcon className="h-5 w-5" />
+                      </button>
+                      <Input
+                        value={activeDocument.title}
+                        onChange={(event) =>
+                          updateActiveDocument({ title: event.target.value })
+                        }
+                        className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:min-w-[240px] md:text-3xl"
+                        placeholder="输入笔记标题"
+                      />
+                    </div>
                     <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
                       <SaveStatusIcon
                         className={cn(
@@ -699,7 +750,7 @@ export function NotesWorkspace({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
                     {activeDocument.isShared ? (
                       <>
                         <TooltipProvider>
@@ -709,6 +760,7 @@ export function NotesWorkspace({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  className="flex-1 sm:flex-none"
                                   onClick={() => void handleCopyShareLink()}
                                 >
                                   <CopyIcon />
@@ -727,6 +779,7 @@ export function NotesWorkspace({
                         <Button
                           variant="outline"
                           size="sm"
+                          className="flex-1 sm:flex-none"
                           onClick={() => setShareDialogOpen(true)}
                           disabled={isDisablingShare}
                         >
@@ -738,6 +791,7 @@ export function NotesWorkspace({
                       <Button
                         variant="outline"
                         size="sm"
+                        className="flex-1 sm:flex-none"
                         onClick={() => void handleEnableShare()}
                       >
                         <Share2Icon />
@@ -747,6 +801,7 @@ export function NotesWorkspace({
                     <Button
                       variant="default"
                       size="sm"
+                      className="flex-1 sm:flex-none"
                       onClick={() => void handleToggleViewMode()}
                     >
                       {viewMode === "edit" ? <EyeIcon /> : <PencilLineIcon />}
@@ -772,6 +827,16 @@ export function NotesWorkspace({
           </section>
         </div>
       </div>
+
+      <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+        <SheetContent side="left" className="w-[86vw] max-w-sm p-0">
+          <SheetHeader className="sr-only">
+            <SheetTitle>笔记列表</SheetTitle>
+            <SheetDescription>在移动端查看和切换笔记。</SheetDescription>
+          </SheetHeader>
+          {notesSidebar}
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog
         open={pendingDeleteId !== null}
