@@ -713,8 +713,8 @@ export function NotesWorkspace({
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex flex-col gap-3 border-b border-border/70 px-4 py-4 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-6">
-                  <div className="min-w-0 flex flex-1 flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-3">
+                <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-4">
+                  <div className="min-w-0 flex flex-1 flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <button
                         type="button"
@@ -729,11 +729,11 @@ export function NotesWorkspace({
                         onChange={(event) =>
                           updateActiveDocument({ title: event.target.value })
                         }
-                        className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:min-w-[240px] md:text-3xl"
+                        className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:min-w-[240px] md:text-lg"
                         placeholder="输入笔记标题"
                       />
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                       <SaveStatusIcon
                         className={cn(
                           "size-4 shrink-0",
