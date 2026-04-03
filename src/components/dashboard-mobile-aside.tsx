@@ -35,7 +35,7 @@ export function DashboardMobileAsideProvider({
   children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
   const [openMobile, setOpenMobile] = React.useState(false);
 
   const toggle = React.useCallback(() => {

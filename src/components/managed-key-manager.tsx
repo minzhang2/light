@@ -1190,6 +1190,49 @@ export function ManagedKeyManager({
     }
   }
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "s") {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (showSettings && !isSavingSettings) {
+        void handleSaveSettings();
+        return;
+      }
+
+      const editableIds = keys
+        .map((key) => key.id)
+        .filter((id) => Boolean(editingIds[id]) && !savingIds[id] && !deletingIds[id] && !testingIds[id]);
+
+      if (editableIds.length === 0) {
+        return;
+      }
+
+      void Promise.all(editableIds.map((id) => handleSaveEdit(id)));
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    deletingIds,
+    editingIds,
+    isSavingSettings,
+    keys,
+    savingIds,
+    showSettings,
+    testingIds,
+  ]);
+
   async function handleBatchTest() {
     if (testableFilteredKeys.length === 0 || isBatchTesting) {
       return;

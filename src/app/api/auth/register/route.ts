@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
 import { normalizeInviteCode } from "@/features/invite-codes/service";
+import { ensureDefaultNoteDocument } from "@/features/notes/service";
 import { isInviteCodeRequiredForRegistration } from "@/lib/auth/registration";
 import { prisma } from "@/lib/prisma";
 
@@ -84,6 +85,8 @@ export async function POST(request: Request) {
         throw new Error("该邮箱已注册。");
       }
 
+      let userId = existing?.id ?? null;
+
       if (existing) {
         await tx.user.update({
           where: { id: existing.id },
@@ -93,13 +96,14 @@ export async function POST(request: Request) {
           },
         });
       } else {
-        await tx.user.create({
+        const createdUser = await tx.user.create({
           data: {
             email,
             name: name || email.split("@")[0],
             passwordHash,
           },
         });
+        userId = createdUser.id;
       }
 
       if (inviteId) {
@@ -114,8 +118,13 @@ export async function POST(request: Request) {
 
       return {
         activated: Boolean(existing),
+        userId: userId ?? existing?.id,
       };
     });
+
+    if (result.userId) {
+      await ensureDefaultNoteDocument(result.userId);
+    }
 
     return NextResponse.json(
       { message: result.activated ? "账号已激活，可直接登录。" : "注册成功。" },

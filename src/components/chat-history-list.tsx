@@ -168,7 +168,7 @@ export function ChatHistoryList({
                     >
                       <Trash2Icon className="h-3.5 w-3.5" />
                     </TooltipTrigger>
-                    <TooltipContent side="right">删除对话</TooltipContent>
+                    <TooltipContent side="top">删除对话</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </button>

@@ -16,6 +16,7 @@ model User {
   passwordHash  String?
   role          String    @default("user")
   accounts      Account[]
+  noteDocuments NoteDocument[]
   sessions      Session[]
 
   createdAt DateTime @default(now())
@@ -167,6 +168,24 @@ model CalendarNote {
 
   @@index([userId, solarDate])
   @@index([reminderEnabled, lunarMonth, lunarDay])
+}
+
+model NoteDocument {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String    @default("未命名笔记")
+  content      String    @default("")
+  isPinned     Boolean   @default(false)
+  isShared     Boolean   @default(false)
+  shareToken   String?   @unique
+  sharedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@index([userId, isPinned, updatedAt])
+  @@index([shareToken])
 }
 
 model AppConfig {

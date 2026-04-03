@@ -13,6 +13,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
+  FileTextIcon,
   KeyRoundIcon,
   MailIcon,
   MessageCircleIcon,
@@ -35,6 +36,15 @@ export function SidebarLeft({
             />
           ),
           isActive: pathname.startsWith("/dashboard/chat"),
+        },
+        {
+          title: "笔记",
+          url: "/dashboard/notes",
+          icon: (
+            <FileTextIcon
+            />
+          ),
+          isActive: pathname.startsWith("/dashboard/notes"),
         },
       ],
     },

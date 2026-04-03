@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs";
 
 import { getUserRoleById } from "@/lib/auth/admin";
 import { consumeLoginCode } from "@/lib/auth/otp";
+import { ensureDefaultNoteDocument } from "@/features/notes/service";
 import { prisma } from "@/lib/prisma";
 
 function normalizeEmail(value: string) {
@@ -139,6 +140,8 @@ export const authOptions: NextAuthOptions = {
           where: { id: user.id },
           data: { lastLoginAt: new Date() },
         }).catch(() => {});
+
+        await ensureDefaultNoteDocument(user.id).catch(() => {});
       }
       return true;
     },

@@ -6,8 +6,11 @@ import {
   ArrowUpIcon,
   CheckIcon,
   ClipboardIcon,
+  CloudIcon,
+  LoaderCircleIcon,
   FileIcon,
   ImageIcon,
+  LockIcon,
   MessageCircleIcon,
   PaperclipIcon,
   RefreshCwIcon,
@@ -49,8 +52,11 @@ type ChatMessage = ChatMessageInput & {
   failed?: boolean;
 };
 
+type SaveState = "idle" | "saving" | "saved" | "error";
+
 const STORAGE_KEY_ID = "chat:selected-key-id";
 const STORAGE_MODEL = "chat:selected-model";
+const DRAFT_STORAGE_PREFIX = "chat:draft";
 
 function MessageActionButton({
   onClick,
@@ -144,6 +150,102 @@ function buildUserMessagePreview(content: string, files: File[]) {
   }
 
   return `${trimmed}\n\n[本次临时附件]\n${summary}`;
+}
+
+function formatSavedTime(value: string | number | Date) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function getDraftStorageKey(sessionId: string | null) {
+  return `${DRAFT_STORAGE_PREFIX}:${sessionId ?? "new"}`;
+}
+
+function readDraft(sessionId: string | null) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(getDraftStorageKey(sessionId));
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { value?: unknown; savedAt?: unknown } | null;
+
+    return {
+      value: typeof parsed?.value === "string" ? parsed.value : "",
+      savedAt: typeof parsed?.savedAt === "string" ? parsed.savedAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(sessionId: string | null, value: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const savedAt = new Date().toISOString();
+  const storageKey = getDraftStorageKey(sessionId);
+
+  if (value.trim().length === 0) {
+    window.localStorage.removeItem(storageKey);
+    return savedAt;
+  }
+
+  window.localStorage.setItem(storageKey, JSON.stringify({ value, savedAt }));
+  return savedAt;
+}
+
+function ChatSaveStatus({
+  saveState,
+  lastSavedAt,
+}: {
+  saveState: SaveState;
+  lastSavedAt: string | null;
+}) {
+  if (saveState === "idle") {
+    return (
+      <div className="inline-flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <LockIcon className="size-3.5 shrink-0" />
+        <span className="truncate">内容将自动保存</span>
+      </div>
+    );
+  }
+
+  if (saveState === "saving") {
+    return (
+      <div className="inline-flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <LoaderCircleIcon className="size-3.5 shrink-0 animate-spin" />
+        <span className="truncate">正在自动保存...</span>
+      </div>
+    );
+  }
+
+  if (saveState === "error") {
+    return (
+      <div className="inline-flex min-w-0 items-center gap-2 text-xs text-destructive">
+        <CloudIcon className="size-3.5 shrink-0" />
+        <span className="truncate">自动保存失败</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <LockIcon className="size-3.5 shrink-0" />
+      <span className="truncate">{lastSavedAt ? `已保存 ${formatSavedTime(lastSavedAt)}` : "已保存"}</span>
+      <CloudIcon className="size-3.5 shrink-0" />
+    </div>
+  );
 }
 
 function parseMessageContent(content: string) {
@@ -390,6 +492,8 @@ export function ChatPlayground({
   const [sessionId, setSessionId] = useState<string | null>(externalSessionId ?? null);
   const [deleteTargetMessageId, setDeleteTargetMessageId] = useState<string | null>(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const pendingCreatedSessionIdRef = useRef<string | null>(null);
   const { toast } = useToast();
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -397,6 +501,7 @@ export function ChatPlayground({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef<string | null>(externalSessionId ?? null);
   const messagesStateRef = useRef<ChatMessage[]>((initialSession?.messages ?? []).map((m) => ({ ...m })));
+  const skipNextDraftSaveRef = useRef(false);
 
   const selectedKey = findKey(keys, selectedKeyId);
   const retryableMessageIds = getRetryableUserMessageIds(messages);
@@ -411,6 +516,57 @@ export function ChatPlayground({
   useEffect(() => {
     messagesStateRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    const draft = readDraft(externalSessionId ?? null);
+
+    if (draft) {
+      skipNextDraftSaveRef.current = true;
+      setInput(draft.value);
+      setLastSavedAt(draft.savedAt);
+      setSaveState("saved");
+      return;
+    }
+
+    setInput("");
+    setLastSavedAt(null);
+    setSaveState("idle");
+  }, [externalSessionId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (skipNextDraftSaveRef.current) {
+      skipNextDraftSaveRef.current = false;
+      return;
+    }
+
+    if (!input.trim()) {
+      if (lastSavedAt === null) {
+        setSaveState("idle");
+        return;
+      }
+    } else {
+      setSaveState("saving");
+    }
+
+    const timer = window.setTimeout(() => {
+      const savedAt = writeDraft(sessionId, input);
+
+      if (!savedAt) {
+        setSaveState("idle");
+        setLastSavedAt(null);
+        return;
+      }
+
+      setLastSavedAt(savedAt);
+      setSaveState("saved");
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [input, lastSavedAt, sessionId]);
 
   // Sync when external session changes (user clicks a history item)
   // or when initialSession is loaded for the current session
@@ -1001,6 +1157,9 @@ export function ChatPlayground({
               placeholder="输入消息，Enter 发送，Shift + Enter 换行"
               className="min-h-16 resize-none border-0 bg-transparent px-5 pt-4 pb-2 text-base shadow-none focus-visible:border-transparent focus-visible:ring-0 md:text-sm dark:bg-transparent"
             />
+            <div className="px-5 pb-1">
+              <ChatSaveStatus saveState={saveState} lastSavedAt={lastSavedAt} />
+            </div>
             <div className="flex items-center gap-1.5 overflow-hidden px-4 pb-2">
               <Input
                 ref={fileInputRef}
