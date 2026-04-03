@@ -11,7 +11,6 @@ import {
   LockIcon,
   PencilLineIcon,
   PinIcon,
-  SaveIcon,
   Share2Icon,
   Trash2Icon,
 } from "lucide-react";
@@ -93,6 +92,9 @@ export function NotesWorkspace({
   const pendingDeleteDocument =
     documents.find((document) => document.id === pendingDeleteId) ?? null;
   const pendingResaveRef = useRef(false);
+  const activeShareUrl = activeDocument?.shareToken
+    ? buildShareUrl(activeDocument.shareToken)
+    : null;
 
   function buildShareUrl(shareToken: string) {
     if (typeof window === "undefined") {
@@ -405,14 +407,12 @@ export function NotesWorkspace({
   }
 
   async function handleCopyShareLink() {
-    if (!activeDocument?.shareToken) {
+    if (!activeShareUrl) {
       return;
     }
 
-    const shareUrl = buildShareUrl(activeDocument.shareToken);
-
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(activeShareUrl);
       toast({
         tone: "success",
         message: "分享链接已复制",
@@ -420,7 +420,7 @@ export function NotesWorkspace({
     } catch {
       toast({
         tone: "info",
-        message: shareUrl,
+        message: activeShareUrl,
         duration: 5000,
       });
     }
@@ -689,14 +689,28 @@ export function NotesWorkspace({
                   <div className="flex items-center gap-2">
                     {activeDocument.isShared ? (
                       <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void handleCopyShareLink()}
-                        >
-                          <CopyIcon />
-                          复制链接
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void handleCopyShareLink()}
+                                >
+                                  <CopyIcon />
+                                  复制链接
+                                </Button>
+                              }
+                            />
+                            <TooltipContent
+                              side="top"
+                              className="max-w-sm whitespace-normal break-all"
+                            >
+                              {activeShareUrl}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <Button
                           variant="outline"
                           size="sm"
@@ -718,28 +732,16 @@ export function NotesWorkspace({
                       </Button>
                     )}
                     <Button
-                      variant={viewMode === "edit" ? "secondary" : "outline"}
+                      variant="default"
                       size="sm"
-                      onClick={() => setViewMode("edit")}
+                      onClick={() =>
+                        setViewMode((currentMode) =>
+                          currentMode === "edit" ? "preview" : "edit",
+                        )
+                      }
                     >
-                      <PencilLineIcon />
-                      编辑
-                    </Button>
-                    <Button
-                      variant={viewMode === "preview" ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => setViewMode("preview")}
-                    >
-                      <EyeIcon />
-                      预览
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => void handleSaveActiveDocument()}
-                      disabled={!isActiveDirty || saveState === "saving"}
-                    >
-                      <SaveIcon />
-                      保存
+                      {viewMode === "edit" ? <EyeIcon /> : <PencilLineIcon />}
+                      {viewMode === "edit" ? "预览" : "编辑"}
                     </Button>
                   </div>
                 </div>
