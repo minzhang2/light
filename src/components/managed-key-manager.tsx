@@ -493,6 +493,7 @@ function ManagedKeyCard({
   const supportedProviders = getSupportedProviders(item.lastTestMessage);
   const hasExpandableContent = visibleModels.length > 0 || !!item.lastTestMessage || isEditing;
   const expanded = isEditing || detailsExpanded;
+  const editFieldClassName = "h-8 rounded-md px-2 text-sm";
 
   return (
     <article className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
@@ -637,67 +638,65 @@ function ManagedKeyCard({
 
       {/* Expandable detail section */}
       {expanded && (
-        <div className="border-t border-border/70 px-4 py-3 space-y-3">
+        <div className="space-y-2.5 border-t border-border/70 px-4 py-2.5">
           {isEditing && editDraft ? (
-            <div className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">名称</span>
-                  <Input
-                    value={editDraft.name}
-                    onChange={(event) => onChangeEditDraft({ name: event.target.value })}
-                    placeholder="名称"
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">Base URL</span>
-                  <Input
-                    value={editDraft.baseUrl}
-                    onChange={(event) => onChangeEditDraft({ baseUrl: event.target.value })}
-                    placeholder="https://api.example.com"
-                  />
-                </label>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">密钥</span>
-                  <Input
-                    value={editDraft.secret}
-                    onChange={(event) => onChangeEditDraft({ secret: event.target.value })}
-                    placeholder="sk-..."
-                  />
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">默认模型</span>
-                  <Input
-                    value={editDraft.model}
-                    onChange={(event) => onChangeEditDraft({ model: event.target.value })}
-                    placeholder="如：claude-sonnet-4-5 或 gpt-4o"
-                  />
-                </label>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">启动模式</span>
-                  <Select
-                    value={editDraft.launchCommand}
-                    onValueChange={(value) =>
-                      onChangeEditDraft({
-                        launchCommand: value as EditDraft["launchCommand"],
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="claude">claude</SelectItem>
-                      <SelectItem value="codex">codex</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </label>
-              </div>
-              <div className="flex justify-end pt-2">
+            <div className="grid gap-2.5 md:grid-cols-3">
+              <label className="space-y-0.5">
+                <span className="text-xs font-medium text-foreground/60">名称</span>
+                <Input
+                  value={editDraft.name}
+                  onChange={(event) => onChangeEditDraft({ name: event.target.value })}
+                  placeholder="名称"
+                  className={editFieldClassName}
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-xs font-medium text-foreground/60">Base URL</span>
+                <Input
+                  value={editDraft.baseUrl}
+                  onChange={(event) => onChangeEditDraft({ baseUrl: event.target.value })}
+                  placeholder="https://api.example.com"
+                  className={editFieldClassName}
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-xs font-medium text-foreground/60">密钥</span>
+                <Input
+                  value={editDraft.secret}
+                  onChange={(event) => onChangeEditDraft({ secret: event.target.value })}
+                  placeholder="sk-..."
+                  className={editFieldClassName}
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-xs font-medium text-foreground/60">默认模型</span>
+                <Input
+                  value={editDraft.model}
+                  onChange={(event) => onChangeEditDraft({ model: event.target.value })}
+                  placeholder="如：claude-sonnet-4-5 或 gpt-4o"
+                  className={editFieldClassName}
+                />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-xs font-medium text-foreground/60">启动模式</span>
+                <Select
+                  value={editDraft.launchCommand}
+                  onValueChange={(value) =>
+                    onChangeEditDraft({
+                      launchCommand: value as EditDraft["launchCommand"],
+                    })
+                  }
+                >
+                  <SelectTrigger className={editFieldClassName}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="claude">claude</SelectItem>
+                    <SelectItem value="codex">codex</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+              <div className="flex items-end justify-start pt-1 md:justify-end">
                 <div className="flex gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={onCancelEdit} disabled={isSaving}>取消</Button>
                   <Button type="button" size="sm" onClick={onSaveEdit} disabled={isSaving}>{isSaving ? "保存中..." : "保存"}</Button>
