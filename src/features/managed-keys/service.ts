@@ -91,7 +91,6 @@ function buildCopyText(key: {
   baseUrl: string;
   model: string | null;
   extraEnv: Record<string, string>;
-  launchCommand: string | null;
 }) {
   const lines =
     key.protocol === "anthropic"
@@ -108,10 +107,6 @@ function buildCopyText(key: {
 
   for (const [envKey, envValue] of Object.entries(key.extraEnv)) {
     lines.push(`export ${envKey}=${envValue}`);
-  }
-
-  if (key.launchCommand) {
-    lines.push(key.launchCommand);
   }
 
   return lines.join("\n");
@@ -146,7 +141,6 @@ function toListItem(key: ManagedKey): ManagedKeyListItem {
       baseUrl: key.baseUrl,
       model: key.model,
       extraEnv,
-      launchCommand: key.launchCommand,
     }),
     isTestable: key.isTestable,
     isPinned: key.isPinned,

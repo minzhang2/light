@@ -30,13 +30,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import {
   Tooltip,
@@ -58,7 +51,6 @@ type EditDraft = {
   secret: string;
   baseUrl: string;
   model: string;
-  launchCommand: "claude" | "codex" | "";
 };
 
 const GROUP_LABELS = {
@@ -67,7 +59,6 @@ const GROUP_LABELS = {
 } as const;
 
 const BATCH_TEST_CONCURRENCY = 5;
-const EMPTY_LAUNCH_COMMAND = "__none__";
 
 function getKeyAvailableModels(key: ManagedKeyListItem) {
   const models = new Set<string>();
@@ -162,27 +153,60 @@ function StatusDot({ status }: { status: ManagedKeyListItem["lastTestStatus"] })
   return <span className={`inline-block h-2 w-2 rounded-full ${className}`} />;
 }
 
+function hasSuccessfulAttemptInSummary(summary: string) {
+  return summary
+    .split(/[，,]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .some((part) => !/（失败(?:\/\d+)?）$/.test(part));
+}
+
+function providerIsAvailable(message: string, label: "Claude" | "Codex") {
+  const normalizedMessage = normalizeProviderLabels(message);
+  const lines = normalizedMessage
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (
+    lines.some((line) =>
+      new RegExp(`^${label}\\s*(?:可用|已发现模型|未验证)`).test(line),
+    )
+  ) {
+    return true;
+  }
+
+  const testLine = lines.find((line) => line.startsWith(`${label} 模型测试：`));
+
+  if (!testLine) {
+    return false;
+  }
+
+  const summary = testLine.slice(`${label} 模型测试：`.length).trim();
+
+  if (!summary || summary === "无可用模型") {
+    return false;
+  }
+
+  if (summary.startsWith("未验证（接口可用")) {
+    return true;
+  }
+
+  return hasSuccessfulAttemptInSummary(summary);
+}
+
 function getSupportedProviders(message: string | null) {
   if (!message) {
     return [];
   }
 
-  const normalizedMessage = normalizeProviderLabels(message);
   const providers: Array<"anthropic" | "openai"> = [];
 
-  if (
-    /Claude\s*(?:可用|已发现模型)(?:（测试模型：|（全局优先模型通过：|，测试模型：|：)/.test(
-      normalizedMessage,
-    )
-  ) {
+  if (providerIsAvailable(message, "Claude")) {
     providers.push("anthropic");
   }
 
-  if (
-    /Codex\s*(?:可用|已发现模型)(?:（测试模型：|（全局优先模型通过：|，测试模型：|：)/.test(
-      normalizedMessage,
-    )
-  ) {
+  if (providerIsAvailable(message, "Codex")) {
     providers.push("openai");
   }
 
@@ -626,41 +650,25 @@ function ManagedKeyCard({
                   />
                 </label>
               </div>
-              <label className="space-y-1">
-                <span className="text-xs font-medium text-foreground/60">密钥</span>
-                <Input
-                  value={editDraft.secret}
-                  onChange={(event) => onChangeEditDraft({ secret: event.target.value })}
-                  placeholder="sk-..."
-                />
-              </label>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1">
-                  <span className="text-xs font-medium text-foreground/60">启动命令</span>
-                  <Select
-                    value={editDraft.launchCommand || EMPTY_LAUNCH_COMMAND}
-                    onValueChange={(value) =>
-                      onChangeEditDraft({
-                        launchCommand:
-                          value === EMPTY_LAUNCH_COMMAND
-                            ? ""
-                            : (value as EditDraft["launchCommand"]),
-                      })
-                    }
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={EMPTY_LAUNCH_COMMAND}>无</SelectItem>
-                      <SelectItem value="claude">claude</SelectItem>
-                      <SelectItem value="codex">codex</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <span className="text-xs font-medium text-foreground/60">密钥</span>
+                  <Input
+                    value={editDraft.secret}
+                    onChange={(event) => onChangeEditDraft({ secret: event.target.value })}
+                    placeholder="sk-..."
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">默认模型</span>
+                  <Input
+                    value={editDraft.model}
+                    onChange={(event) => onChangeEditDraft({ model: event.target.value })}
+                    placeholder="如：claude-sonnet-4-5 或 gpt-4o"
+                  />
                 </label>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>分组：{GROUP_LABELS[item.group]}</span>
-                </div>
+              <div className="flex justify-end pt-2">
                 <div className="flex gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={onCancelEdit} disabled={isSaving}>取消</Button>
                   <Button type="button" size="sm" onClick={onSaveEdit} disabled={isSaving}>{isSaving ? "保存中..." : "保存"}</Button>
@@ -671,7 +679,7 @@ function ManagedKeyCard({
 
           {!isEditing && item.model ? (
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-foreground/50 font-medium">Model</span>
+              <span className="text-foreground/50 font-medium">默认模型</span>
               <span className="text-muted-foreground">{item.model}</span>
             </div>
           ) : null}
@@ -968,7 +976,6 @@ export function ManagedKeyManager({
         secret: key.secret,
         baseUrl: key.baseUrl,
         model: key.model ?? "",
-        launchCommand: key.launchCommand ?? "",
       },
     }));
   }
@@ -1055,7 +1062,6 @@ export function ManagedKeyManager({
         secret: draft.secret,
         baseUrl: draft.baseUrl,
         model: draft.model.trim() || null,
-        launchCommand: draft.launchCommand || null,
       },
       "已保存。",
     );

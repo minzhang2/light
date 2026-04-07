@@ -513,6 +513,7 @@ export function NotesWorkspace({
     : saveState === "saving" || isActiveDirty
       ? CloudIcon
       : LockIcon;
+  const activeTitleMeasure = activeDocument?.title || "输入笔记标题";
 
   useEffect(() => {
     setClientOrigin(window.location.origin);
@@ -714,7 +715,7 @@ export function NotesWorkspace({
             ) : (
               <div className="flex h-full min-h-0 flex-col">
                 <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-4">
-                  <div className="min-w-0 flex flex-1 flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-3">
+                  <div className="min-w-0 flex flex-1 flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <button
                         type="button"
@@ -724,16 +725,27 @@ export function NotesWorkspace({
                       >
                         <MenuIcon className="h-5 w-5" />
                       </button>
-                      <Input
-                        value={activeDocument.title}
-                        onChange={(event) =>
-                          updateActiveDocument({ title: event.target.value })
-                        }
-                        className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:min-w-[240px] md:text-lg"
-                        placeholder="输入笔记标题"
-                      />
+                      <div className="relative min-w-0 flex-1 overflow-hidden md:w-max md:max-w-[32rem] md:flex-none lg:max-w-[40rem]">
+                        <span
+                          aria-hidden="true"
+                          className="invisible block min-w-[4ch] max-w-full truncate whitespace-pre px-0 py-0 text-xl font-semibold md:text-lg"
+                        >
+                          {activeTitleMeasure}
+                        </span>
+                        <Input
+                          value={activeDocument.title}
+                          onChange={(event) =>
+                            updateActiveDocument({ title: event.target.value })
+                          }
+                          className="absolute inset-0 h-full min-w-0 w-full border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:text-lg"
+                          placeholder="输入笔记标题"
+                        />
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                    <div className={cn(
+                      "flex shrink-0 items-center gap-2 text-xs",
+                      saveState === "error" ? "text-destructive" : "text-muted-foreground",
+                    )}>
                       <SaveStatusIcon
                         className={cn(
                           "size-4 shrink-0",
