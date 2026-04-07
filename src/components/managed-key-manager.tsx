@@ -20,6 +20,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -51,6 +58,7 @@ type EditDraft = {
   secret: string;
   baseUrl: string;
   model: string;
+  launchCommand: "claude" | "codex";
 };
 
 const GROUP_LABELS = {
@@ -668,6 +676,27 @@ function ManagedKeyCard({
                   />
                 </label>
               </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-xs font-medium text-foreground/60">启动模式</span>
+                  <Select
+                    value={editDraft.launchCommand}
+                    onValueChange={(value) =>
+                      onChangeEditDraft({
+                        launchCommand: value as EditDraft["launchCommand"],
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="claude">claude</SelectItem>
+                      <SelectItem value="codex">codex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
               <div className="flex justify-end pt-2">
                 <div className="flex gap-2">
                   <Button type="button" size="sm" variant="outline" onClick={onCancelEdit} disabled={isSaving}>取消</Button>
@@ -976,6 +1005,7 @@ export function ManagedKeyManager({
         secret: key.secret,
         baseUrl: key.baseUrl,
         model: key.model ?? "",
+        launchCommand: key.launchCommand ?? "claude",
       },
     }));
   }
@@ -1062,6 +1092,7 @@ export function ManagedKeyManager({
         secret: draft.secret,
         baseUrl: draft.baseUrl,
         model: draft.model.trim() || null,
+        launchCommand: draft.launchCommand,
       },
       "已保存。",
     );
