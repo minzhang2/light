@@ -771,6 +771,7 @@ export function ManagedKeyManager({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<KeyFilter>("all");
   const [rawImport, setRawImport] = useState("");
+  const [importAsTestable, setImportAsTestable] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -866,7 +867,7 @@ export function ManagedKeyManager({
       const response = await fetch("/api/keys/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ raw: rawImport }),
+        body: JSON.stringify({ raw: rawImport, isTestable: importAsTestable }),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -1440,7 +1441,20 @@ export function ManagedKeyManager({
             placeholder="粘贴 export ... 文本，系统自动去重归类"
             className="min-h-32 w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
           />
-          <div className="mt-2 flex justify-end">
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-muted/20 px-3 py-2">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">是否测试</Label>
+                <p className="text-xs text-muted-foreground">
+                  关闭后导入的 key 会标记为禁测，且不会自动触发导入后测试。
+                </p>
+              </div>
+              <Switch
+                checked={importAsTestable}
+                onCheckedChange={setImportAsTestable}
+                aria-label="切换导入后是否测试"
+              />
+            </div>
             <Button
               type="button"
               onClick={handleImport}

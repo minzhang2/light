@@ -196,7 +196,11 @@ function isUnknownUpdateArgumentError(error: unknown, argument: string) {
   );
 }
 
-function mergeExistingWithParsed(existing: ManagedKey | null, entry: ParsedManagedKeyInput) {
+function mergeExistingWithParsed(
+  existing: ManagedKey | null,
+  entry: ParsedManagedKeyInput,
+  options?: { isTestable?: boolean },
+) {
   const aliases = new Set([
     ...parseJsonArray(existing?.aliases ?? null),
     ...entry.aliases,
@@ -221,6 +225,9 @@ function mergeExistingWithParsed(existing: ManagedKey | null, entry: ParsedManag
       ...entry.extraEnv,
     }),
     fingerprint: entry.fingerprint,
+    ...(typeof options?.isTestable === "boolean"
+      ? { isTestable: options.isTestable }
+      : {}),
   };
 }
 
@@ -870,7 +877,10 @@ export async function exportManagedKeys() {
   return buildExportText(keys);
 }
 
-export async function importManagedKeys(raw: string) {
+export async function importManagedKeys(
+  raw: string,
+  options?: { isTestable?: boolean },
+) {
   const entries = parseManagedKeys(raw);
   const newKeyIds: string[] = [];
 
@@ -879,7 +889,7 @@ export async function importManagedKeys(raw: string) {
       where: { fingerprint: entry.fingerprint },
     });
 
-    const data = mergeExistingWithParsed(existing, entry);
+    const data = mergeExistingWithParsed(existing, entry, options);
 
     const record = await prisma.managedKey.upsert({
       where: { fingerprint: entry.fingerprint },

@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { raw?: unknown }
+    | { raw?: unknown; isTestable?: unknown }
     | null;
 
   if (!body || typeof body.raw !== "string" || !body.raw.trim()) {
@@ -20,7 +20,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await importManagedKeys(body.raw);
+    const result = await importManagedKeys(body.raw, {
+      isTestable:
+        typeof body.isTestable === "boolean" ? body.isTestable : undefined,
+    });
 
     if (result.parsedCount === 0) {
       return NextResponse.json(
