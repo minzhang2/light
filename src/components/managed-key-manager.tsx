@@ -110,6 +110,30 @@ function mergeAvailableModels(
   return [...merged];
 }
 
+function buildKeyEnvCopyText(key: ManagedKeyListItem) {
+  const lines = [
+    ...(key.protocol === "anthropic"
+      ? [
+          `export ANTHROPIC_AUTH_TOKEN=${key.secret}`,
+          `export ANTHROPIC_BASE_URL=${key.baseUrl}`,
+          ...(key.model ? [`export ANTHROPIC_MODEL=${key.model}`] : []),
+        ]
+      : [
+          `export OPENAI_API_KEY=${key.secret}`,
+          `export OPENAI_BASE_URL=${key.baseUrl}`,
+          ...(key.model ? [`export OPENAI_MODEL=${key.model}`] : []),
+        ]),
+  ];
+
+  for (const [envKey, envValue] of Object.entries(key.extraEnv)) {
+    lines.push(`export ${envKey}=${envValue}`);
+  }
+
+  lines.push(key.launchCommand ?? "claude");
+
+  return lines.join("\n");
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "未测试";
@@ -1505,7 +1529,7 @@ export function ManagedKeyManager({
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
-                        onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
+                        onCopyEnv={() => copyToClipboard(buildKeyEnvCopyText(key), "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
                         onTest={() => handleTest(key.id)}
                         onTogglePinned={() => handleTogglePinned(key)}
@@ -1559,7 +1583,7 @@ export function ManagedKeyManager({
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
-                        onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
+                        onCopyEnv={() => copyToClipboard(buildKeyEnvCopyText(key), "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
                         onTest={() => handleTest(key.id)}
                         onTogglePinned={() => handleTogglePinned(key)}
@@ -1613,7 +1637,7 @@ export function ManagedKeyManager({
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
-                        onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
+                        onCopyEnv={() => copyToClipboard(buildKeyEnvCopyText(key), "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
                         onTest={() => handleTest(key.id)}
                         onTogglePinned={() => handleTogglePinned(key)}
@@ -1669,7 +1693,7 @@ export function ManagedKeyManager({
                         isBatchTesting={isBatchTesting}
                         editDraft={editDrafts[key.id] ?? null}
                         onCopyKey={() => copyToClipboard(key.secret, "Key")}
-                        onCopyEnv={() => copyToClipboard(key.copyText, "环境变量")}
+                        onCopyEnv={() => copyToClipboard(buildKeyEnvCopyText(key), "环境变量")}
                         onDelete={() => setDeleteTargetId(key.id)}
                         onTest={() => handleTest(key.id)}
                         onTogglePinned={() => handleTogglePinned(key)}
