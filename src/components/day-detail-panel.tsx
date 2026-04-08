@@ -4,6 +4,7 @@ import { useState } from "react"
 import {
   BellIcon,
   BellOffIcon,
+  Loader2Icon,
   PencilIcon,
   PlusIcon,
   SendIcon,
@@ -13,6 +14,13 @@ import {
 import type { LunarDayInfo } from "@/features/chinese-calendar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { useToast } from "@/components/ui/toast"
 
 export interface CalendarNoteData {
   id: string
@@ -139,81 +147,145 @@ function NoteSection({
 }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [testingId, setTestingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  async function handleDelete(noteId: string) {
+    setDeletingId(noteId)
+    try {
+      const response = await fetch(`/api/calendar-notes/${noteId}`, {
+        method: "DELETE",
+      })
+      const payload = (await response.json().catch(() => null)) as
+        | { message?: string }
+        | null
+
+      if (!response.ok) {
+        throw new Error(payload?.message ?? "删除备注失败")
+      }
+
+      onNotesChanged()
+      toast({
+        tone: "success",
+        message: "备注已删除",
+      })
+    } catch (error) {
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "删除备注失败",
+      })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function handleTestReminder(noteId: string) {
+    setTestingId(noteId)
+    try {
+      const response = await fetch(`/api/calendar-notes/${noteId}`, {
+        method: "POST",
+      })
+      const payload = (await response.json().catch(() => null)) as
+        | { message?: string; sentTo?: string }
+        | null
+
+      if (!response.ok) {
+        throw new Error(payload?.message ?? "发送测试提醒失败")
+      }
+
+      toast({
+        tone: "success",
+        message: payload?.sentTo
+          ? `测试提醒已发送到 ${payload.sentTo}`
+          : "测试提醒已发送",
+      })
+    } catch (error) {
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "发送测试提醒失败",
+      })
+    } finally {
+      setTestingId(null)
+    }
+  }
 
   return (
-    <div className="space-y-1.5 border-t border-border/50 pt-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">备注</span>
-        {!adding && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={() => setAdding(true)}
-          >
-            <PlusIcon className="size-3" />
-          </Button>
-        )}
-      </div>
+    <TooltipProvider delay={120}>
+      <div className="space-y-1.5 border-t border-border/50 pt-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">备注</span>
+          {!adding && (
+            <IconActionButton
+              tooltip="添加备注"
+              className="size-6"
+              onClick={() => setAdding(true)}
+            >
+              <PlusIcon className="size-3" />
+            </IconActionButton>
+          )}
+        </div>
 
-      {notes.map((n) =>
-        editingId === n.id ? (
+        {notes.map((n) =>
+          editingId === n.id ? (
+            <NoteForm
+              key={n.id}
+              date={date}
+              userEmail={userEmail}
+              initial={n}
+              onDone={() => {
+                setEditingId(null)
+                onNotesChanged()
+              }}
+              onCancel={() => setEditingId(null)}
+            />
+          ) : (
+            <NoteItem
+              key={n.id}
+              note={n}
+              isDeleting={deletingId === n.id}
+              isTesting={testingId === n.id}
+              onEdit={() => setEditingId(n.id)}
+              onDelete={() => handleDelete(n.id)}
+              onTestReminder={() => handleTestReminder(n.id)}
+            />
+          ),
+        )}
+
+        {adding && (
           <NoteForm
-            key={n.id}
             date={date}
             userEmail={userEmail}
-            initial={n}
             onDone={() => {
-              setEditingId(null)
+              setAdding(false)
               onNotesChanged()
             }}
-            onCancel={() => setEditingId(null)}
+            onCancel={() => setAdding(false)}
           />
-        ) : (
-          <NoteItem
-            key={n.id}
-            note={n}
-            onEdit={() => setEditingId(n.id)}
-            onDelete={async () => {
-              await fetch(`/api/calendar-notes/${n.id}`, { method: "DELETE" })
-              onNotesChanged()
-            }}
-            onTestReminder={async () => {
-              await fetch(`/api/calendar-notes/${n.id}`, { method: "POST" })
-            }}
-          />
-        ),
-      )}
+        )}
 
-      {adding && (
-        <NoteForm
-          date={date}
-          userEmail={userEmail}
-          onDone={() => {
-            setAdding(false)
-            onNotesChanged()
-          }}
-          onCancel={() => setAdding(false)}
-        />
-      )}
-
-      {notes.length === 0 && !adding && (
-        <p className="text-xs text-muted-foreground">暂无备注</p>
-      )}
-    </div>
+        {notes.length === 0 && !adding && (
+          <p className="text-xs text-muted-foreground">暂无备注</p>
+        )}
+      </div>
+    </TooltipProvider>
   )
 }
 
 function NoteItem({
   note,
+  isDeleting,
+  isTesting,
   onEdit,
   onDelete,
   onTestReminder,
 }: {
   note: CalendarNoteData
+  isDeleting: boolean
+  isTesting: boolean
   onEdit: () => void
-  onDelete: () => void
-  onTestReminder: () => void
+  onDelete: () => Promise<void> | void
+  onTestReminder: () => Promise<void> | void
 }) {
   return (
     <div className="rounded-md bg-muted/50">
@@ -225,16 +297,39 @@ function NoteItem({
         <p className="min-w-0 flex-1 text-xs leading-relaxed break-words">{note.note}</p>
         <div className="flex shrink-0 gap-0.5">
           {note.reminderEnabled && (
-            <Button variant="ghost" size="icon" className="size-5" onClick={onTestReminder} title="发送测试提醒">
-              <SendIcon className="size-2.5" />
-            </Button>
+            <IconActionButton
+              tooltip={isTesting ? "发送中..." : "发送测试提醒"}
+              className="size-5"
+              disabled={isTesting}
+              onClick={() => void onTestReminder()}
+            >
+              {isTesting ? (
+                <Loader2Icon className="size-2.5 animate-spin" />
+              ) : (
+                <SendIcon className="size-2.5" />
+              )}
+            </IconActionButton>
           )}
-          <Button variant="ghost" size="icon" className="size-5" onClick={onEdit}>
+          <IconActionButton
+            tooltip="编辑备注"
+            className="size-5"
+            disabled={isDeleting || isTesting}
+            onClick={onEdit}
+          >
             <PencilIcon className="size-2.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="size-5" onClick={onDelete}>
-            <Trash2Icon className="size-2.5" />
-          </Button>
+          </IconActionButton>
+          <IconActionButton
+            tooltip={isDeleting ? "删除中..." : "删除备注"}
+            className="size-5"
+            disabled={isDeleting || isTesting}
+            onClick={() => void onDelete()}
+          >
+            {isDeleting ? (
+              <Loader2Icon className="size-2.5 animate-spin" />
+            ) : (
+              <Trash2Icon className="size-2.5" />
+            )}
+          </IconActionButton>
         </div>
       </div>
       <div className="mt-0.5 flex items-center gap-1 text-[0.6rem] text-muted-foreground">
@@ -253,6 +348,33 @@ function NoteItem({
         )}
       </div>
     </div>
+  )
+}
+
+function IconActionButton({
+  tooltip,
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof Button> & {
+  tooltip: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className={className}
+            {...props}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   )
 }
 

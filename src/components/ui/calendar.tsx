@@ -189,12 +189,18 @@ function CalendarDayButton({
   day,
   modifiers,
   locale: _locale,
+  children,
   ...props
 }: React.ComponentProps<typeof DayButton> & {
   locale?: React.ComponentProps<typeof DayPicker>["locale"]
 }) {
   const defaultClassNames = getDefaultClassNames()
   void _locale
+  const isSelected =
+    modifiers.selected &&
+    !modifiers.range_start &&
+    !modifiers.range_end &&
+    !modifiers.range_middle
 
   const ref = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => {
@@ -206,12 +212,7 @@ function CalendarDayButton({
       variant="ghost"
       size="icon"
       data-day={getCalendarDateKey(day.date)}
-      data-selected-single={
-        modifiers.selected &&
-        !modifiers.range_start &&
-        !modifiers.range_end &&
-        !modifiers.range_middle
-      }
+      data-selected-single={isSelected}
       data-range-start={modifiers.range_start}
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
@@ -221,7 +222,16 @@ function CalendarDayButton({
         className
       )}
       {...props}
-    />
+    >
+      {modifiers.today && (
+        <span
+          className="pointer-events-none absolute top-1 left-1 z-30 rounded-sm border border-background/80 bg-sky-500 px-0.5 text-[0.45rem] leading-[0.7rem] font-semibold text-white opacity-100"
+        >
+          今
+        </span>
+      )}
+      {children}
+    </Button>
   )
 }
 

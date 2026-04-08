@@ -69,6 +69,18 @@ const GROUP_LABELS = {
 
 const BATCH_TEST_CONCURRENCY = 5;
 
+function inferLaunchCommand(
+  key: Pick<ManagedKeyListItem, "group" | "protocol" | "launchCommand">,
+) {
+  if (key.launchCommand === "claude" || key.launchCommand === "codex") {
+    return key.launchCommand;
+  }
+
+  return key.group === "codex" || key.protocol === "openai"
+    ? "codex"
+    : "claude";
+}
+
 function getKeyAvailableModels(key: ManagedKeyListItem) {
   const models = new Set<string>();
 
@@ -130,7 +142,7 @@ function buildKeyEnvCopyText(key: ManagedKeyListItem) {
     lines.push(`export ${envKey}=${envValue}`);
   }
 
-  lines.push(key.launchCommand ?? "claude");
+  lines.push(inferLaunchCommand(key));
 
   return lines.join("\n");
 }
@@ -1030,7 +1042,7 @@ export function ManagedKeyManager({
         secret: key.secret,
         baseUrl: key.baseUrl,
         model: key.model ?? "",
-        launchCommand: key.launchCommand ?? "claude",
+        launchCommand: inferLaunchCommand(key),
       },
     }));
   }
@@ -1105,10 +1117,18 @@ export function ManagedKeyManager({
 
   async function handleSaveEdit(id: string) {
     const draft = editDrafts[id];
+    const currentKey = keys.find((key) => key.id === id);
 
-    if (!draft) {
+    if (!draft || !currentKey) {
       return;
     }
+
+    const inferredLaunchCommand = inferLaunchCommand(currentKey);
+    const nextLaunchCommand =
+      currentKey.launchCommand === null &&
+      draft.launchCommand === inferredLaunchCommand
+        ? undefined
+        : draft.launchCommand;
 
     const updated = await patchKey(
       id,
@@ -1117,7 +1137,7 @@ export function ManagedKeyManager({
         secret: draft.secret,
         baseUrl: draft.baseUrl,
         model: draft.model.trim() || null,
-        launchCommand: draft.launchCommand,
+        launchCommand: nextLaunchCommand,
       },
       "已保存。",
     );

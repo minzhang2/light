@@ -219,14 +219,21 @@ function ChineseDayButton({
       {...props}
     >
       {/* Top row: holiday badge + date number */}
-      <span className="relative flex w-full items-center justify-center text-[0.8rem]">
+      <span className="relative flex min-h-4 w-full items-center justify-center px-0.5 text-[0.8rem]">
+        {modifiers.today && (
+          <span
+            className="pointer-events-none absolute top-0 left-0.5 z-30 rounded-sm border border-background/80 bg-sky-500 px-0.5 text-[0.4rem] leading-[0.7rem] font-semibold text-white"
+          >
+            今
+          </span>
+        )}
         {info?.isHoliday && (
-          <span className="absolute -top-0.5 right-0 rounded-sm bg-red-500 px-0.5 text-[0.4rem] leading-[0.7rem] text-white">
+          <span className="pointer-events-none absolute top-0 right-0.5 z-30 rounded-sm border border-background/80 bg-red-500 px-0.5 text-[0.4rem] leading-[0.7rem] text-white">
             休
           </span>
         )}
         {info?.isWorkday && (
-          <span className="absolute -top-0.5 right-0 rounded-sm bg-orange-500 px-0.5 text-[0.4rem] leading-[0.7rem] text-white">
+          <span className="pointer-events-none absolute top-0 right-0.5 z-30 rounded-sm border border-background/80 bg-orange-500 px-0.5 text-[0.4rem] leading-[0.7rem] text-white">
             班
           </span>
         )}

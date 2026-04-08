@@ -196,6 +196,15 @@ function isUnknownUpdateArgumentError(error: unknown, argument: string) {
   );
 }
 
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  );
+}
+
 function mergeExistingWithParsed(
   existing: ManagedKey | null,
   entry: ParsedManagedKeyInput,
@@ -961,6 +970,52 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
     launchCommand,
   ]);
 
+  const conflicting = await prisma.managedKey.findFirst({
+    where: {
+      fingerprint: nextFingerprint,
+      NOT: { id },
+    },
+  });
+
+  if (conflicting) {
+    if (existing.fingerprint === nextFingerprint) {
+      throw new Error("已存在相同配置的 key。");
+    }
+
+    const mergedAliases = new Set<string>([
+      ...parseJsonArray(existing.aliases),
+      ...parseJsonArray(conflicting.aliases),
+      existing.name,
+      conflicting.name,
+    ]);
+
+    mergedAliases.delete(name);
+    mergedAliases.delete("");
+
+    const repaired = await prisma.$transaction(async (tx) => {
+      await tx.managedKey.delete({
+        where: { id: conflicting.id },
+      });
+
+      return tx.managedKey.update({
+        where: { id },
+        data: {
+          name,
+          aliases: stringifyAliases([...mergedAliases]),
+          secret,
+          baseUrl,
+          model,
+          launchCommand,
+          isTestable,
+          isPinned,
+          fingerprint: nextFingerprint,
+        },
+      });
+    });
+
+    return toListItem(repaired);
+  }
+
   try {
     const updated = await prisma.managedKey.update({
       where: { id },
@@ -978,10 +1033,7 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
 
     return toListItem(updated);
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isUniqueConstraintError(error)) {
       throw new Error("已存在相同配置的 key。");
     }
 
