@@ -13,21 +13,30 @@ function getToday() {
 
 export function DatePicker() {
   const [date, setDate] = React.useState<Date | undefined>()
+  const [displayMonth, setDisplayMonth] = React.useState<Date | undefined>()
 
   React.useEffect(() => {
-    setDate(getToday())
+    const today = getToday()
+    setDate(today)
+    setDisplayMonth(today)
   }, [])
 
   return (
     <SidebarGroup className="px-0">
       <SidebarGroupContent>
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={setDate}
-          captionLayout="dropdown"
-          className="bg-transparent [--cell-size:2.1rem]"
-        />
+        {!displayMonth ? (
+          <div className="h-[17rem] rounded-xl border border-dashed border-border/60 bg-muted/20" />
+        ) : (
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={setDate}
+            month={displayMonth}
+            onMonthChange={setDisplayMonth}
+            captionLayout="dropdown"
+            className="bg-transparent [--cell-size:2.1rem]"
+          />
+        )}
       </SidebarGroupContent>
     </SidebarGroup>
   )

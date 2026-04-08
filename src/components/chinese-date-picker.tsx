@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sidebar"
 import { useLunarMonth } from "@/features/chinese-calendar"
 import type { LunarDayInfo, DateMarker } from "@/features/chinese-calendar"
+import { getCalendarDateKey } from "@/lib/date-time"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -26,10 +27,7 @@ const LunarDataContext = React.createContext<{
 }>({ lunarData: new Map(), markers: [] })
 
 function toISODate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  return `${y}-${m}-${day}`
+  return getCalendarDateKey(d)
 }
 
 function getToday() {
@@ -44,12 +42,14 @@ interface ChineseDatePickerProps {
 
 export function ChineseDatePicker({ markers: externalMarkers = [], userEmail = "" }: ChineseDatePickerProps) {
   const [date, setDate] = React.useState<Date | undefined>()
-  const [displayMonth, setDisplayMonth] = React.useState(() => getToday())
+  const [displayMonth, setDisplayMonth] = React.useState<Date | undefined>()
   const [notes, setNotes] = React.useState<CalendarNoteData[]>([])
   const [fetchVersion, setFetchVersion] = React.useState(0)
 
   React.useEffect(() => {
-    setDate(getToday())
+    const today = getToday()
+    setDate(today)
+    setDisplayMonth(today)
   }, [])
 
   // Fetch all notes for this user
@@ -71,7 +71,7 @@ export function ChineseDatePicker({ markers: externalMarkers = [], userEmail = "
     return () => { cancelled = true }
   }, [fetchVersion])
 
-  const lunarData = useLunarMonth(displayMonth)
+  const lunarData = useLunarMonth(displayMonth ?? getToday())
 
   // Convert notes to markers
   const allMarkers = React.useMemo(() => {
@@ -100,6 +100,11 @@ export function ChineseDatePicker({ markers: externalMarkers = [], userEmail = "
   return (
     <SidebarGroup className="px-0">
       <SidebarGroupContent className="w-full">
+        {!displayMonth ? (
+          <div className="px-2 py-1">
+            <div className="h-[17rem] rounded-xl border border-dashed border-border/60 bg-muted/20" />
+          </div>
+        ) : (
         <LunarDataContext.Provider value={{ lunarData, markers: allMarkers }}>
           <Calendar
             mode="single"
@@ -124,6 +129,7 @@ export function ChineseDatePicker({ markers: externalMarkers = [], userEmail = "
             }}
           />
         </LunarDataContext.Provider>
+        )}
         {date && selectedLunarInfo && (
           <DayDetailPanel
             info={selectedLunarInfo}
@@ -194,7 +200,7 @@ function ChineseDayButton({
       ref={ref}
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString()}
+      data-day={getCalendarDateKey(day.date)}
       data-selected-single={isSelected}
       data-range-start={modifiers.range_start}
       data-range-end={modifiers.range_end}

@@ -1,23 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ShieldCheckIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { formatInAppTimeZone } from "@/lib/date-time";
 import { compareManagedUsers } from "@/features/admin-users/sort";
 import type { ManagedUserListItem } from "@/features/admin-users/types";
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+  return formatInAppTimeZone(value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 }
 
 function formatOptionalDateTime(value: string | null) {
@@ -27,7 +28,7 @@ function formatOptionalDateTime(value: string | null) {
   return formatDateTime(value);
 }
 
-function getActivityBadge(lastActiveAt: string | null) {
+function getActivityBadge(lastActiveAt: string | null, now: number | null) {
   if (!lastActiveAt) {
     return {
       label: "暂无活跃记录",
@@ -35,7 +36,14 @@ function getActivityBadge(lastActiveAt: string | null) {
     };
   }
 
-  const diff = Math.max(0, Date.now() - new Date(lastActiveAt).getTime());
+  if (now === null) {
+    return {
+      label: "活跃状态加载中",
+      className: "bg-muted text-muted-foreground",
+    };
+  }
+
+  const diff = Math.max(0, now - new Date(lastActiveAt).getTime());
 
   if (diff <= DAY_IN_MS) {
     return {
@@ -67,23 +75,33 @@ export function AdminUserManager({
   const [users, setUsers] = useState(initialUsers);
   const [targetEmail, setTargetEmail] = useState("");
   const [updatingUserEmail, setUpdatingUserEmail] = useState<string | null>(null);
+  const [referenceNow, setReferenceNow] = useState<number | null>(null);
   const { toast } = useToast();
 
+  useEffect(() => {
+    setReferenceNow(Date.now());
+  }, []);
+
   const stats = useMemo(() => {
-    const now = Date.now();
     const adminCount = users.filter((user) => user.role === "admin").length;
-    const activeIn24Hours = users.filter((user) => {
-      if (!user.activity.lastActiveAt) {
-        return false;
-      }
-      return now - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS;
-    }).length;
-    const activeIn7Days = users.filter((user) => {
-      if (!user.activity.lastActiveAt) {
-        return false;
-      }
-      return now - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS * 7;
-    }).length;
+    const activeIn24Hours =
+      referenceNow === null
+        ? null
+        : users.filter((user) => {
+            if (!user.activity.lastActiveAt) {
+              return false;
+            }
+            return referenceNow - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS;
+          }).length;
+    const activeIn7Days =
+      referenceNow === null
+        ? null
+        : users.filter((user) => {
+            if (!user.activity.lastActiveAt) {
+              return false;
+            }
+            return referenceNow - new Date(user.activity.lastActiveAt).getTime() <= DAY_IN_MS * 7;
+          }).length;
 
     return {
       total: users.length,
@@ -92,7 +110,7 @@ export function AdminUserManager({
       activeIn24Hours,
       activeIn7Days,
     };
-  }, [users]);
+  }, [referenceNow, users]);
 
   async function handleRoleUpdate(email: string, role: "admin" | "user") {
     setUpdatingUserEmail(email);
@@ -147,7 +165,7 @@ export function AdminUserManager({
 
       <p className="text-xs text-muted-foreground">
         共 {stats.total} 人，{stats.admins} 个管理员，{stats.users} 个普通用户，近 24 小时活跃{" "}
-        {stats.activeIn24Hours} 人，近 7 天活跃 {stats.activeIn7Days} 人
+        {stats.activeIn24Hours ?? "--"} 人，近 7 天活跃 {stats.activeIn7Days ?? "--"} 人
       </p>
 
       {users.length === 0 ? (
@@ -160,7 +178,7 @@ export function AdminUserManager({
             const isCurrentUser = user.email === currentAdminEmail.toLowerCase();
             const isEnvAdmin = user.roleSource === "environment";
             const isUpdating = updatingUserEmail === user.email;
-            const activityBadge = getActivityBadge(user.activity.lastActiveAt);
+            const activityBadge = getActivityBadge(user.activity.lastActiveAt, referenceNow);
 
             return (
               <div key={user.id} className="flex items-start gap-3 px-4 py-3">

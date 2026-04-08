@@ -5,9 +5,13 @@ import {
   DayPicker,
   getDefaultClassNames,
   type DayButton,
-  type Locale,
 } from "react-day-picker"
 
+import {
+  APP_LOCALE,
+  formatCalendarMonthLabel,
+  getCalendarDateKey,
+} from "@/lib/date-time"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
@@ -40,7 +44,7 @@ function Calendar({
       locale={locale}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString(locale?.code, { month: "short" }),
+          formatCalendarMonthLabel(date, locale?.code ?? APP_LOCALE),
         ...formatters,
       }}
       classNames={{
@@ -184,10 +188,13 @@ function CalendarDayButton({
   className,
   day,
   modifiers,
-  locale,
+  locale: _locale,
   ...props
-}: React.ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) {
+}: React.ComponentProps<typeof DayButton> & {
+  locale?: React.ComponentProps<typeof DayPicker>["locale"]
+}) {
   const defaultClassNames = getDefaultClassNames()
+  void _locale
 
   const ref = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => {
@@ -198,7 +205,7 @@ function CalendarDayButton({
     <Button
       variant="ghost"
       size="icon"
-      data-day={day.date.toLocaleDateString(locale?.code)}
+      data-day={getCalendarDateKey(day.date)}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&

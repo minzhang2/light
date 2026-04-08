@@ -14,16 +14,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { formatInAppTimeZone } from "@/lib/date-time";
 import type { InviteCodeListItem } from "@/features/invite-codes/types";
 
 function formatDateTime(value: string | null) {
   if (!value) return null;
-  return new Intl.DateTimeFormat("zh-CN", {
+  return formatInAppTimeZone(value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 }
 
 export function InviteCodeManager({

@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   AlertCircleIcon,
   CloudIcon,
@@ -43,6 +43,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  formatInAppTimeZone,
+  getTimeZoneDayIndex,
+} from "@/lib/date-time";
 import { cn } from "@/lib/utils";
 
 interface NoteDocument {
@@ -71,6 +75,7 @@ export function NotesWorkspace({
   const isMobile = useIsMobile();
   const [documents, setDocuments] = useState(initialDocuments);
   const [clientOrigin, setClientOrigin] = useState("");
+  const [referenceNow, setReferenceNow] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(
     initialDocuments[0]?.id ?? null,
@@ -520,6 +525,10 @@ export function NotesWorkspace({
   }, []);
 
   useEffect(() => {
+    setReferenceNow(Date.now());
+  }, []);
+
+  useEffect(() => {
     if (saveState === "saving" || saveState === "error" || isActiveDirty) {
       return;
     }
@@ -551,6 +560,14 @@ export function NotesWorkspace({
     };
   }, [activeDocument, isActiveDirty, saveState]);
 
+  const handleSaveShortcut = useEffectEvent(() => {
+    if (!activeDocument || !isActiveDirty || saveState === "saving") {
+      return;
+    }
+
+    void handleSaveActiveDocument();
+  });
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented) {
@@ -559,12 +576,7 @@ export function NotesWorkspace({
 
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "s") {
         event.preventDefault();
-
-        if (!activeDocument || !isActiveDirty || saveState === "saving") {
-          return;
-        }
-
-        void handleSaveActiveDocument();
+        handleSaveShortcut();
       }
     }
 
@@ -573,7 +585,7 @@ export function NotesWorkspace({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [activeDocument, isActiveDirty, saveState]);
+  }, []);
 
   const notesSidebar = (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -596,7 +608,10 @@ export function NotesWorkspace({
             暂无笔记
           </p>
         ) : (
-          groupDocuments(documents).map((group) => (
+          (referenceNow === null
+            ? [{ label: "全部笔记", items: documents }]
+            : groupDocuments(documents, referenceNow)
+          ).map((group) => (
             <div key={group.label} className="mb-3">
               <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
                 {group.label}
@@ -939,30 +954,8 @@ export function NotesWorkspace({
   );
 }
 
-function formatRelativeTime(value: string) {
-  const now = Date.now();
-  const target = new Date(value).getTime();
-  const diffMinutes = Math.max(0, Math.round((now - target) / 60000));
-
-  if (diffMinutes < 1) {
-    return "刚刚";
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes} 分钟前`;
-  }
-
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) {
-    return `${diffHours} 小时前`;
-  }
-
-  const diffDays = Math.round(diffHours / 24);
-  return `${diffDays} 天前`;
-}
-
 function formatSavedTime(value: string) {
-  return new Date(value).toLocaleTimeString("zh-CN", {
+  return formatInAppTimeZone(value, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -983,14 +976,8 @@ function sortDocuments(left: NoteDocument, right: NoteDocument) {
   );
 }
 
-function groupDocuments(documents: NoteDocument[]) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
+function groupDocuments(documents: NoteDocument[], now: number) {
+  const todayIndex = getTimeZoneDayIndex(now);
   const groups: { label: string; items: NoteDocument[] }[] = [
     { label: "已置顶", items: [] },
     { label: "今天", items: [] },
@@ -1004,12 +991,13 @@ function groupDocuments(documents: NoteDocument[]) {
       groups[0].items.push(doc);
       continue;
     }
-    const d = new Date(doc.updatedAt);
-    if (d >= today) {
+    const dayDiff = todayIndex - getTimeZoneDayIndex(doc.updatedAt);
+
+    if (dayDiff <= 0) {
       groups[1].items.push(doc);
-    } else if (d >= yesterday) {
+    } else if (dayDiff === 1) {
       groups[2].items.push(doc);
-    } else if (d >= sevenDaysAgo) {
+    } else if (dayDiff < 7) {
       groups[3].items.push(doc);
     } else {
       groups[4].items.push(doc);

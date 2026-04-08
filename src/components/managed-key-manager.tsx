@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   CheckIcon,
   ChevronDownIcon,
@@ -43,6 +43,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatInAppTimeZone } from "@/lib/date-time";
 import type {
   GlobalConfig,
   ManagedKeyListItem,
@@ -139,12 +140,12 @@ function formatDateTime(value: string | null) {
     return "未测试";
   }
 
-  return new Intl.DateTimeFormat("zh-CN", {
+  return formatInAppTimeZone(value, {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 }
 
 function ActionIconButton({
@@ -1251,6 +1252,23 @@ export function ManagedKeyManager({
     }
   }
 
+  const handleSaveShortcut = useEffectEvent(() => {
+    if (showSettings && !isSavingSettings) {
+      void handleSaveSettings();
+      return;
+    }
+
+    const editableIds = keys
+      .map((key) => key.id)
+      .filter((id) => Boolean(editingIds[id]) && !savingIds[id] && !deletingIds[id] && !testingIds[id]);
+
+    if (editableIds.length === 0) {
+      return;
+    }
+
+    void Promise.all(editableIds.map((id) => handleSaveEdit(id)));
+  });
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.defaultPrevented) {
@@ -1262,21 +1280,7 @@ export function ManagedKeyManager({
       }
 
       event.preventDefault();
-
-      if (showSettings && !isSavingSettings) {
-        void handleSaveSettings();
-        return;
-      }
-
-      const editableIds = keys
-        .map((key) => key.id)
-        .filter((id) => Boolean(editingIds[id]) && !savingIds[id] && !deletingIds[id] && !testingIds[id]);
-
-      if (editableIds.length === 0) {
-        return;
-      }
-
-      void Promise.all(editableIds.map((id) => handleSaveEdit(id)));
+      handleSaveShortcut();
     }
 
     window.addEventListener("keydown", handleKeyDown);
@@ -1284,15 +1288,7 @@ export function ManagedKeyManager({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    deletingIds,
-    editingIds,
-    isSavingSettings,
-    keys,
-    savingIds,
-    showSettings,
-    testingIds,
-  ]);
+  }, []);
 
   async function handleBatchTest() {
     if (testableFilteredKeys.length === 0 || isBatchTesting) {
