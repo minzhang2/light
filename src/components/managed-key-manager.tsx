@@ -791,7 +791,7 @@ export function ManagedKeyManager({
   const [showPinned, setShowPinned] = useState(true);
   const [showNoTest, setShowNoTest] = useState(false);
   const [showAvailable, setShowAvailable] = useState(true);
-  const [showOther, setShowOther] = useState(true);
+  const [showOther, setShowOther] = useState(false);
   const [testingIds, setTestingIds] = useState<Record<string, boolean>>({});
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
