@@ -542,6 +542,278 @@ function extractErrorMessage(payload: unknown) {
   return null;
 }
 
+function extractTextFromValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => extractTextFromValue(item))
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (typeof record.output_text === "string") {
+    return record.output_text.trim();
+  }
+
+  if (typeof record.completion === "string") {
+    return record.completion.trim();
+  }
+
+  if (typeof record.text === "string") {
+    return record.text.trim();
+  }
+
+  if (record.text && typeof record.text === "object") {
+    const nestedText = extractTextFromValue(record.text);
+    if (nestedText) {
+      return nestedText;
+    }
+  }
+
+  if (record.delta && typeof record.delta === "object") {
+    const deltaText = extractTextFromValue(record.delta);
+    if (deltaText) {
+      return deltaText;
+    }
+  }
+
+  if (record.message && typeof record.message === "object") {
+    const messageText = extractTextFromValue(record.message);
+    if (messageText) {
+      return messageText;
+    }
+  }
+
+  if (record.content) {
+    const contentText = extractTextFromValue(record.content);
+    if (contentText) {
+      return contentText;
+    }
+  }
+
+  if (record.output) {
+    const outputText = extractTextFromValue(record.output);
+    if (outputText) {
+      return outputText;
+    }
+  }
+
+  if (record.parts) {
+    const partsText = extractTextFromValue(record.parts);
+    if (partsText) {
+      return partsText;
+    }
+  }
+
+  return "";
+}
+
+function extractAnthropicText(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  return (
+    extractTextFromValue((payload as { content?: unknown }).content) ||
+    extractTextFromValue(payload)
+  );
+}
+
+function extractOpenAiText(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return "";
+  }
+
+  const choices = (payload as { choices?: Array<{ message?: unknown; delta?: unknown }> }).choices;
+
+  if (Array.isArray(choices)) {
+    for (const choice of choices) {
+      const messageText = extractTextFromValue(choice?.message);
+      if (messageText) {
+        return messageText;
+      }
+
+      const deltaText = extractTextFromValue(choice?.delta);
+      if (deltaText) {
+        return deltaText;
+      }
+    }
+  }
+
+  return (
+    extractTextFromValue((payload as { output_text?: unknown }).output_text) ||
+    extractTextFromValue((payload as { completion?: unknown }).completion) ||
+    extractTextFromValue((payload as { output?: unknown }).output) ||
+    extractTextFromValue((payload as { candidates?: unknown }).candidates) ||
+    extractTextFromValue(payload)
+  );
+}
+
+type ProviderResponseFormat = "json" | "event-stream" | "text" | "empty";
+
+type ParsedProviderResponse = {
+  payload: unknown;
+  rawText: string;
+  contentType: string | null;
+  format: ProviderResponseFormat;
+};
+
+function formatProviderRawText(rawText: string, limit = 600) {
+  const normalized = rawText.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit
+    ? `${normalized.slice(0, limit)}...`
+    : normalized;
+}
+
+function appendProviderRawText(message: string, response: ParsedProviderResponse) {
+  const snippet = formatProviderRawText(response.rawText);
+
+  if (!snippet) {
+    return message;
+  }
+
+  return `${message} 上游返回：${snippet}`;
+}
+
+async function parseProviderResponse(response: Response): Promise<ParsedProviderResponse> {
+  const contentType = response.headers.get("content-type");
+  const rawText = (await response.text().catch(() => "")).trim();
+
+  if (!rawText) {
+    return {
+      payload: null,
+      rawText: "",
+      contentType,
+      format: "empty",
+    };
+  }
+
+  try {
+    return {
+      payload: JSON.parse(rawText) as unknown,
+      rawText,
+      contentType,
+      format: "json",
+    };
+  } catch {
+    if (contentType?.includes("text/event-stream") || /^data:/m.test(rawText)) {
+      return {
+        payload: null,
+        rawText,
+        contentType,
+        format: "event-stream",
+      };
+    }
+
+    return {
+      payload: null,
+      rawText,
+      contentType,
+      format: "text",
+    };
+  }
+}
+
+function extractTextFromEventStreamChunk(chunk: string, protocol: "anthropic" | "openai") {
+  const trimmed = chunk.trim();
+
+  if (!trimmed || trimmed === "[DONE]") {
+    return "";
+  }
+
+  try {
+    const payload = JSON.parse(trimmed) as unknown;
+    return protocol === "anthropic"
+      ? extractAnthropicText(payload)
+      : extractOpenAiText(payload);
+  } catch {
+    return "";
+  }
+}
+
+function extractTextFromEventStream(rawText: string, protocol: "anthropic" | "openai") {
+  return rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => extractTextFromEventStreamChunk(line.slice("data:".length), protocol))
+    .filter(Boolean)
+    .join("")
+    .trim();
+}
+
+function extractProviderContent(
+  response: ParsedProviderResponse,
+  protocol: "anthropic" | "openai",
+) {
+  if (response.format === "json") {
+    return protocol === "anthropic"
+      ? extractAnthropicText(response.payload)
+      : extractOpenAiText(response.payload);
+  }
+
+  if (response.format === "event-stream") {
+    return extractTextFromEventStream(response.rawText, protocol);
+  }
+
+  if (response.format === "text" && response.contentType?.startsWith("text/plain")) {
+    return response.rawText;
+  }
+
+  return "";
+}
+
+function buildEmptyProviderResponseMessage(
+  response: ParsedProviderResponse,
+  protocol: "anthropic" | "openai",
+) {
+  const providerLabel = protocol === "anthropic" ? "Claude" : "Codex";
+
+  if (response.format === "empty") {
+    return appendProviderRawText(`${providerLabel} 接口返回了空响应体。`, response);
+  }
+
+  if (response.format === "event-stream") {
+    return appendProviderRawText(`${providerLabel} 接口返回了流式响应，但未解析出文本内容。`, response);
+  }
+
+  if (response.format === "text") {
+    const message = response.contentType?.startsWith("text/plain")
+      ? `${providerLabel} 接口返回了纯文本响应，但内容为空。`
+      : `${providerLabel} 接口返回格式无法识别（${response.contentType ?? "unknown"}）。`;
+
+    return appendProviderRawText(message, response);
+  }
+
+  return appendProviderRawText(
+    `${providerLabel} 接口返回成功，但未解析出文本内容。`,
+    response,
+  );
+}
+
+function buildProviderRequestErrorMessage(
+  response: ParsedProviderResponse,
+  fallback: string,
+) {
+  const baseMessage = extractErrorMessage(response.payload) ?? fallback;
+  return appendProviderRawText(baseMessage, response);
+}
+
 function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedModels"]) {
   if (attempts.length === 0) {
     return "";
@@ -630,12 +902,10 @@ async function testAnthropicKey(
       signal: AbortSignal.timeout(20000),
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | { content?: Array<{ text?: string }> }
-      | { error?: { message?: string } }
-      | null;
+    const providerResponse = await parseProviderResponse(response);
+    const content = extractProviderContent(providerResponse, "anthropic");
 
-    if (response.ok) {
+    if (response.ok && content) {
       attempts.push({
         model: candidate.model,
         ok: true,
@@ -650,7 +920,12 @@ async function testAnthropicKey(
       continue;
     }
 
-    lastFailureMessage = extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`;
+    lastFailureMessage = response.ok
+      ? buildEmptyProviderResponseMessage(providerResponse, "anthropic")
+      : buildProviderRequestErrorMessage(
+          providerResponse,
+          `消息测试失败（HTTP ${response.status}）`,
+        );
     lastStatusCode = response.status;
     attempts.push({
       model: candidate.model,
@@ -760,12 +1035,10 @@ async function testOpenAiKey(
       signal: AbortSignal.timeout(20000),
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | { choices?: Array<{ message?: { content?: string } }> }
-      | { error?: { message?: string } }
-      | null;
+    const providerResponse = await parseProviderResponse(response);
+    const content = extractProviderContent(providerResponse, "openai");
 
-    if (response.ok) {
+    if (response.ok && content) {
       attempts.push({
         model: candidate.model,
         ok: true,
@@ -780,7 +1053,12 @@ async function testOpenAiKey(
       continue;
     }
 
-    lastFailureMessage = extractErrorMessage(payload) ?? `消息测试失败（HTTP ${response.status}）`;
+    lastFailureMessage = response.ok
+      ? buildEmptyProviderResponseMessage(providerResponse, "openai")
+      : buildProviderRequestErrorMessage(
+          providerResponse,
+          `消息测试失败（HTTP ${response.status}）`,
+        );
     lastStatusCode = response.status;
     attempts.push({
       model: candidate.model,

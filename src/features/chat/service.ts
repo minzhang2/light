@@ -408,6 +408,162 @@ function extractOpenAiText(payload: unknown) {
   return extractCommonPayloadText(payload);
 }
 
+type ProviderResponseFormat = "json" | "event-stream" | "text" | "empty";
+
+type ParsedProviderResponse = {
+  payload: unknown;
+  rawText: string;
+  contentType: string | null;
+  format: ProviderResponseFormat;
+};
+
+function formatProviderRawText(rawText: string, limit = 600) {
+  const normalized = rawText.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > limit
+    ? `${normalized.slice(0, limit)}...`
+    : normalized;
+}
+
+function appendProviderRawText(message: string, response: ParsedProviderResponse) {
+  const snippet = formatProviderRawText(response.rawText);
+
+  if (!snippet) {
+    return message;
+  }
+
+  return `${message} 上游返回：${snippet}`;
+}
+
+async function parseProviderResponse(response: Response): Promise<ParsedProviderResponse> {
+  const contentType = response.headers.get("content-type");
+  const rawText = (await response.text().catch(() => "")).trim();
+
+  if (!rawText) {
+    return {
+      payload: null,
+      rawText: "",
+      contentType,
+      format: "empty",
+    };
+  }
+
+  try {
+    return {
+      payload: JSON.parse(rawText) as unknown,
+      rawText,
+      contentType,
+      format: "json",
+    };
+  } catch {
+    if (contentType?.includes("text/event-stream") || /^data:/m.test(rawText)) {
+      return {
+        payload: null,
+        rawText,
+        contentType,
+        format: "event-stream",
+      };
+    }
+
+    return {
+      payload: null,
+      rawText,
+      contentType,
+      format: "text",
+    };
+  }
+}
+
+function extractTextFromEventStreamChunk(chunk: string, protocol: "anthropic" | "openai") {
+  const trimmed = chunk.trim();
+
+  if (!trimmed || trimmed === "[DONE]") {
+    return "";
+  }
+
+  try {
+    const payload = JSON.parse(trimmed) as unknown;
+    return protocol === "anthropic"
+      ? extractAnthropicText(payload)
+      : extractOpenAiText(payload);
+  } catch {
+    return "";
+  }
+}
+
+function extractTextFromEventStream(rawText: string, protocol: "anthropic" | "openai") {
+  return rawText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => extractTextFromEventStreamChunk(line.slice("data:".length), protocol))
+    .filter(Boolean)
+    .join("")
+    .trim();
+}
+
+function extractProviderContent(
+  response: ParsedProviderResponse,
+  protocol: "anthropic" | "openai",
+) {
+  if (response.format === "json") {
+    return protocol === "anthropic"
+      ? extractAnthropicText(response.payload)
+      : extractOpenAiText(response.payload);
+  }
+
+  if (response.format === "event-stream") {
+    return extractTextFromEventStream(response.rawText, protocol);
+  }
+
+  if (response.format === "text" && response.contentType?.startsWith("text/plain")) {
+    return response.rawText;
+  }
+
+  return "";
+}
+
+function buildEmptyProviderResponseMessage(
+  response: ParsedProviderResponse,
+  protocol: "anthropic" | "openai",
+) {
+  const providerLabel = protocol === "anthropic" ? "Claude" : "Codex";
+
+  if (response.format === "empty") {
+    return appendProviderRawText(`${providerLabel} 接口返回了空响应体，请先重新测试 key。`, response);
+  }
+
+  if (response.format === "event-stream") {
+    return appendProviderRawText(`${providerLabel} 接口返回了流式响应，但未解析出文本内容，请先重新测试 key。`, response);
+  }
+
+  if (response.format === "text") {
+    const message = response.contentType?.startsWith("text/plain")
+      ? `${providerLabel} 接口返回了纯文本响应，但内容为空，请先重新测试 key。`
+      : `${providerLabel} 接口返回格式无法识别（${response.contentType ?? "unknown"}），请先重新测试 key。`;
+
+    return appendProviderRawText(message, response);
+  }
+
+  return appendProviderRawText(
+    `${providerLabel} 接口返回成功，但未解析出文本内容，请先重新测试 key。`,
+    response,
+  );
+}
+
+function buildProviderRequestErrorMessage(
+  response: ParsedProviderResponse,
+  status: number,
+  fallback: string,
+) {
+  const baseMessage = extractErrorMessage(response.payload) ?? fallback;
+  return appendProviderRawText(baseMessage, response);
+}
+
 function extractCommonPayloadText(payload: unknown) {
   if (!payload || typeof payload !== "object") {
     return "";
@@ -613,18 +769,22 @@ export async function createChatCompletion(input: {
       signal: requestSignal,
     });
 
-    const payload = await response.json().catch(() => null);
+    const providerResponse = await parseProviderResponse(response);
 
     if (!response.ok) {
       throw new Error(
-        extractErrorMessage(payload) ?? `聊天请求失败（HTTP ${response.status}）`,
+        buildProviderRequestErrorMessage(
+          providerResponse,
+          response.status,
+          `聊天请求失败（HTTP ${response.status}）`,
+        ),
       );
     }
 
-    const content = extractAnthropicText(payload);
+    const content = extractProviderContent(providerResponse, "anthropic");
 
     if (!content) {
-      throw new Error("模型返回为空。");
+      throw new Error(buildEmptyProviderResponseMessage(providerResponse, "anthropic"));
     }
 
     return {
@@ -649,18 +809,22 @@ export async function createChatCompletion(input: {
     signal: requestSignal,
   });
 
-  const payload = await response.json().catch(() => null);
+  const providerResponse = await parseProviderResponse(response);
 
   if (!response.ok) {
     throw new Error(
-      extractErrorMessage(payload) ?? `聊天请求失败（HTTP ${response.status}）`,
+      buildProviderRequestErrorMessage(
+        providerResponse,
+        response.status,
+        `聊天请求失败（HTTP ${response.status}）`,
+      ),
     );
   }
 
-  const content = extractOpenAiText(payload);
+  const content = extractProviderContent(providerResponse, "openai");
 
   if (!content) {
-    throw new Error("模型返回为空。");
+    throw new Error(buildEmptyProviderResponseMessage(providerResponse, "openai"));
   }
 
   return {
