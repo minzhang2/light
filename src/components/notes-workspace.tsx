@@ -513,6 +513,7 @@ export function NotesWorkspace({
   }
 
   const isActiveDirty = activeDocument ? isDocumentDirty(activeDocument) : false;
+  const isNotesInitialLoading = referenceNow === null;
   const SaveStatusIcon = saveState === "error"
     ? AlertCircleIcon
     : saveState === "saving" || isActiveDirty
@@ -603,15 +604,16 @@ export function NotesWorkspace({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-4">
-        {documents.length === 0 ? (
+        {isNotesInitialLoading ? (
+          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+            加载中...
+          </p>
+        ) : documents.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             暂无笔记
           </p>
         ) : (
-          (referenceNow === null
-            ? [{ label: "全部笔记", items: documents }]
-            : groupDocuments(documents, referenceNow)
-          ).map((group) => (
+          groupDocuments(documents, referenceNow ?? Date.now()).map((group) => (
             <div key={group.label} className="mb-3">
               <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
                 {group.label}

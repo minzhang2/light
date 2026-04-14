@@ -86,6 +86,7 @@ function MailboxSidebar({
   activeMailboxId,
   deletingIds,
   emailsLoadingIds,
+  isInitialLoading,
   mailboxes,
   onDeleteMailbox,
   onFetchEmails,
@@ -98,6 +99,7 @@ function MailboxSidebar({
   activeMailboxId: number | null;
   deletingIds: number[];
   emailsLoadingIds: number[];
+  isInitialLoading: boolean;
   mailboxes: Mailbox[];
   onDeleteMailbox: (mailbox: Mailbox) => void;
   onFetchEmails: (mailbox: Mailbox) => void;
@@ -132,7 +134,11 @@ function MailboxSidebar({
         </Select>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-1">
-        {mailboxes.length === 0 ? (
+        {isInitialLoading ? (
+          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+            加载中...
+          </p>
+        ) : mailboxes.length === 0 ? (
           <p className="px-2 py-4 text-center text-xs text-muted-foreground">
             暂无邮箱
           </p>
@@ -451,6 +457,7 @@ function findMailboxById(mailboxId: number | null, mailboxes: Mailbox[]) {
 export function MailContainer() {
   const { toast } = useToast();
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [activeMailboxId, setActiveMailboxId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [emailsLoadingIds, setEmailsLoadingIds] = useState<number[]>([]);
@@ -463,6 +470,7 @@ export function MailContainer() {
   const [domain, setDomain] = useState<DomainValue>("9");
 
   const logRef = useRef<HTMLDivElement>(null);
+  const hasLoadedMailboxesRef = useRef(false);
   const activeMailbox = findMailboxById(activeMailboxId, mailboxes);
 
   const addLog = useCallback((type: LogEntry["type"], message: string) => {
@@ -491,6 +499,7 @@ export function MailContainer() {
     let cancelled = false;
     setMailboxes([]);
     setActiveMailboxId(null);
+    setIsInitialLoading(!hasLoadedMailboxesRef.current);
 
     async function loadMailboxes() {
       try {
@@ -521,6 +530,11 @@ export function MailContainer() {
         setActiveMailboxId((current) => current ?? fromDb[0].id);
       } catch {
         // 未登录或网络错误时静默忽略，保持页面可用。
+      } finally {
+        if (!cancelled) {
+          hasLoadedMailboxesRef.current = true;
+          setIsInitialLoading(false);
+        }
       }
     }
 
@@ -736,6 +750,7 @@ export function MailContainer() {
           activeMailboxId={activeMailbox?.id ?? null}
           deletingIds={deletingIds}
           emailsLoadingIds={emailsLoadingIds}
+          isInitialLoading={isInitialLoading}
           mailboxes={mailboxes}
           onCopyMailbox={handleCopyMailbox}
           onDeleteMailbox={(mailbox) => void deleteMailbox(mailbox)}
@@ -758,6 +773,7 @@ export function MailContainer() {
               activeMailboxId={activeMailbox?.id ?? null}
               deletingIds={deletingIds}
               emailsLoadingIds={emailsLoadingIds}
+              isInitialLoading={isInitialLoading}
               mailboxes={mailboxes}
               onCopyMailbox={handleCopyMailbox}
               onDeleteMailbox={(mailbox) => void deleteMailbox(mailbox)}

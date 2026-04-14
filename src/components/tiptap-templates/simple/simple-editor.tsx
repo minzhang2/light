@@ -105,7 +105,7 @@ function EditorLoadingFallback({
       <div className="simple-editor-content">
         <div
           aria-hidden={editable || undefined}
-          className="simple-editor-fallback"
+          className="simple-editor-fallback tiptap ProseMirror simple-editor"
           dangerouslySetInnerHTML={{ __html: markup }}
         />
       </div>
@@ -229,6 +229,42 @@ const MobileToolbarContent = ({
     ) : (
       <LinkContent />
     )}
+  </>
+)
+
+const ToolbarLoadingFallback = ({ isMobile }: { isMobile: boolean }) => (
+  <>
+    <Spacer />
+
+    <ToolbarGroup aria-hidden className="pointer-events-none">
+      <Skeleton className="h-8 w-8 rounded-md" />
+      <Skeleton className="h-8 w-8 rounded-md" />
+    </ToolbarGroup>
+
+    <ToolbarSeparator />
+
+    <ToolbarGroup aria-hidden className="pointer-events-none">
+      <Skeleton className="h-8 w-10 rounded-md" />
+      <Skeleton className="h-8 w-10 rounded-md" />
+      <Skeleton className="h-8 w-10 rounded-md" />
+      <Skeleton className="h-8 w-10 rounded-md" />
+    </ToolbarGroup>
+
+    <ToolbarSeparator />
+
+    <ToolbarGroup aria-hidden className="pointer-events-none">
+      <Skeleton className="h-8 w-8 rounded-md" />
+      <Skeleton className="h-8 w-8 rounded-md" />
+      <Skeleton className="h-8 w-8 rounded-md" />
+    </ToolbarGroup>
+
+    <Spacer />
+
+    {isMobile && <ToolbarSeparator />}
+
+    <ToolbarGroup aria-hidden className="pointer-events-none">
+      <Skeleton className="h-8 w-8 rounded-md" />
+    </ToolbarGroup>
   </>
 )
 
@@ -365,7 +401,7 @@ export function SimpleEditor({
   return (
     <div className="simple-editor-wrapper">
       <EditorContext.Provider value={{ editor }}>
-        {showToolbar && editor ? (
+        {showToolbar ? (
           <Toolbar
             ref={toolbarRef}
             style={{
@@ -379,18 +415,22 @@ export function SimpleEditor({
                 : {}),
             }}
           >
-          {toolbarView === "main" ? (
-            <MainToolbarContent
-              onHighlighterClick={() => setMobileView("highlighter")}
-              onLinkClick={() => setMobileView("link")}
-              isMobile={isMobile}
-            />
-          ) : (
-            <MobileToolbarContent
-              type={toolbarView === "highlighter" ? "highlighter" : "link"}
-              onBack={() => setMobileView("main")}
-            />
-          )}
+            {editor ? (
+              toolbarView === "main" ? (
+                <MainToolbarContent
+                  onHighlighterClick={() => setMobileView("highlighter")}
+                  onLinkClick={() => setMobileView("link")}
+                  isMobile={isMobile}
+                />
+              ) : (
+                <MobileToolbarContent
+                  type={toolbarView === "highlighter" ? "highlighter" : "link"}
+                  onBack={() => setMobileView("main")}
+                />
+              )
+            ) : (
+              <ToolbarLoadingFallback isMobile={isMobile} />
+            )}
           </Toolbar>
         ) : null}
 
