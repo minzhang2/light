@@ -6,6 +6,7 @@ import type {
   ManagedKeyProtocol,
   ParsedManagedKeyInput,
 } from "@/features/managed-keys/types";
+import { normalizeBaseUrl } from "@/features/managed-keys/utils";
 
 type BlockState = {
   label: string | null;
@@ -47,10 +48,6 @@ function normalizeLabel(label: string | null) {
 
   const normalized = label.trim().replace(/^\/+\s*/, "").replace(/\s+/g, " ");
   return normalized || null;
-}
-
-function normalizeBaseUrl(value: string) {
-  return value.trim().replace(/\/+$/, "");
 }
 
 export function buildManagedKeyFingerprint(parts: Array<string | null>) {

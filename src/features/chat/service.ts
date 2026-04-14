@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import type { ManagedKeyListItem } from "@/features/managed-keys/types";
+import {
+  extractAnthropicText,
+  extractOpenAiText,
+  extractTextFromValue,
+} from "@/lib/provider-response-parser";
 import type {
   ChatAttachmentInput,
   ChatCompletionResult,
@@ -264,148 +269,6 @@ function extractErrorMessage(payload: unknown) {
   }
 
   return null;
-}
-
-function extractAnthropicText(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return "";
-  }
-
-  const directContent = extractTextFromValue(
-    (payload as { content?: unknown }).content,
-  );
-
-  if (directContent) {
-    return directContent;
-  }
-
-  return extractCommonPayloadText(payload);
-}
-
-function extractTextFromValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => extractTextFromValue(item))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-  }
-
-  if (!value || typeof value !== "object") {
-    return "";
-  }
-
-  const record = value as Record<string, unknown>;
-
-  if (typeof record.output_text === "string") {
-    return record.output_text.trim();
-  }
-
-  if (typeof record.completion === "string") {
-    return record.completion.trim();
-  }
-
-  if (typeof record.text === "string") {
-    return record.text.trim();
-  }
-
-  if (record.text && typeof record.text === "object") {
-    const nestedText = extractTextFromValue(record.text);
-    if (nestedText) {
-      return nestedText;
-    }
-  }
-
-  if (record.delta && typeof record.delta === "object") {
-    const deltaText = extractTextFromValue(record.delta);
-    if (deltaText) {
-      return deltaText;
-    }
-  }
-
-  if (record.message && typeof record.message === "object") {
-    const messageText = extractTextFromValue(record.message);
-    if (messageText) {
-      return messageText;
-    }
-  }
-
-  if (record.content) {
-    const contentText = extractTextFromValue(record.content);
-    if (contentText) {
-      return contentText;
-    }
-  }
-
-  if (record.output) {
-    const outputText = extractTextFromValue(record.output);
-    if (outputText) {
-      return outputText;
-    }
-  }
-
-  if (record.parts) {
-    const partsText = extractTextFromValue(record.parts);
-    if (partsText) {
-      return partsText;
-    }
-  }
-
-  return "";
-}
-
-function extractOpenAiText(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return "";
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: unknown; delta?: unknown }> }).choices;
-
-  if (Array.isArray(choices)) {
-    for (const choice of choices) {
-      const messageText = extractTextFromValue(choice?.message);
-      if (messageText) {
-        return messageText;
-      }
-
-      const deltaText = extractTextFromValue(choice?.delta);
-      if (deltaText) {
-        return deltaText;
-      }
-    }
-  }
-
-  const directOutputText = extractTextFromValue(
-    (payload as { output_text?: unknown }).output_text,
-  );
-  if (directOutputText) {
-    return directOutputText;
-  }
-
-  const directCompletionText = extractTextFromValue(
-    (payload as { completion?: unknown }).completion,
-  );
-  if (directCompletionText) {
-    return directCompletionText;
-  }
-
-  const directOutput = extractTextFromValue((payload as { output?: unknown }).output);
-  if (directOutput) {
-    return directOutput;
-  }
-
-  const directCandidates = extractTextFromValue(
-    (payload as { candidates?: unknown }).candidates,
-  );
-  if (directCandidates) {
-    return directCandidates;
-  }
-
-  return extractCommonPayloadText(payload);
 }
 
 type ProviderResponseFormat = "json" | "event-stream" | "text" | "empty";

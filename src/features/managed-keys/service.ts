@@ -5,6 +5,11 @@ import {
   maskSecret,
   parseManagedKeys,
 } from "@/features/managed-keys/parser";
+import {
+  extractAnthropicText,
+  extractOpenAiText,
+} from "@/lib/provider-response-parser";
+import { normalizeBaseUrl } from "@/features/managed-keys/utils";
 import type {
   GlobalConfig,
   ManagedKeyListItem,
@@ -79,10 +84,6 @@ function normalizeModelConfig(values: string[]) {
   }
 
   return normalized;
-}
-
-function normalizeBaseUrl(value: string) {
-  return value.trim().replace(/\/+$/, "");
 }
 
 function buildCopyText(key: {
@@ -542,123 +543,6 @@ function extractErrorMessage(payload: unknown) {
   return null;
 }
 
-function extractTextFromValue(value: unknown): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => extractTextFromValue(item))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-  }
-
-  if (!value || typeof value !== "object") {
-    return "";
-  }
-
-  const record = value as Record<string, unknown>;
-
-  if (typeof record.output_text === "string") {
-    return record.output_text.trim();
-  }
-
-  if (typeof record.completion === "string") {
-    return record.completion.trim();
-  }
-
-  if (typeof record.text === "string") {
-    return record.text.trim();
-  }
-
-  if (record.text && typeof record.text === "object") {
-    const nestedText = extractTextFromValue(record.text);
-    if (nestedText) {
-      return nestedText;
-    }
-  }
-
-  if (record.delta && typeof record.delta === "object") {
-    const deltaText = extractTextFromValue(record.delta);
-    if (deltaText) {
-      return deltaText;
-    }
-  }
-
-  if (record.message && typeof record.message === "object") {
-    const messageText = extractTextFromValue(record.message);
-    if (messageText) {
-      return messageText;
-    }
-  }
-
-  if (record.content) {
-    const contentText = extractTextFromValue(record.content);
-    if (contentText) {
-      return contentText;
-    }
-  }
-
-  if (record.output) {
-    const outputText = extractTextFromValue(record.output);
-    if (outputText) {
-      return outputText;
-    }
-  }
-
-  if (record.parts) {
-    const partsText = extractTextFromValue(record.parts);
-    if (partsText) {
-      return partsText;
-    }
-  }
-
-  return "";
-}
-
-function extractAnthropicText(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return "";
-  }
-
-  return (
-    extractTextFromValue((payload as { content?: unknown }).content) ||
-    extractTextFromValue(payload)
-  );
-}
-
-function extractOpenAiText(payload: unknown) {
-  if (!payload || typeof payload !== "object") {
-    return "";
-  }
-
-  const choices = (payload as { choices?: Array<{ message?: unknown; delta?: unknown }> }).choices;
-
-  if (Array.isArray(choices)) {
-    for (const choice of choices) {
-      const messageText = extractTextFromValue(choice?.message);
-      if (messageText) {
-        return messageText;
-      }
-
-      const deltaText = extractTextFromValue(choice?.delta);
-      if (deltaText) {
-        return deltaText;
-      }
-    }
-  }
-
-  return (
-    extractTextFromValue((payload as { output_text?: unknown }).output_text) ||
-    extractTextFromValue((payload as { completion?: unknown }).completion) ||
-    extractTextFromValue((payload as { output?: unknown }).output) ||
-    extractTextFromValue((payload as { candidates?: unknown }).candidates) ||
-    extractTextFromValue(payload)
-  );
-}
-
 type ProviderResponseFormat = "json" | "event-stream" | "text" | "empty";
 
 type ParsedProviderResponse = {
@@ -827,12 +711,35 @@ function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedModels"]) 
   return orderedAttempts
     .map((attempt) => {
       if (attempt.ok) {
-        return attempt.model;
+        const latencyInfo = attempt.latency ? ` ${attempt.latency}ms` : "";
+        return `${attempt.model}${latencyInfo}`;
       }
 
       return `${attempt.model}（失败${attempt.statusCode ? `/${attempt.statusCode}` : ""}）`;
     })
     .join("，");
+}
+
+const TEST_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function shouldSkipTest(key: ManagedKey): boolean {
+  if (!key.lastTestAt || key.lastTestStatus !== "success") {
+    return false;
+  }
+  const lastTest = key.lastTestAt.getTime();
+  return Date.now() - lastTest < TEST_CACHE_DURATION;
+}
+
+function calculateAverageLatency(attempts: ManagedKeyTestResult["attemptedModels"]): number | undefined {
+  const latencies = attempts
+    .filter((attempt) => attempt.ok && typeof attempt.latency === "number")
+    .map((attempt) => attempt.latency as number);
+
+  if (latencies.length === 0) {
+    return undefined;
+  }
+
+  return Math.round(latencies.reduce((sum, lat) => sum + lat, 0) / latencies.length);
 }
 
 async function testAnthropicKey(
@@ -886,6 +793,7 @@ async function testAnthropicKey(
   let successfulPreferredModel: string | null = null;
 
   for (const candidate of modelsToTest) {
+    const startTime = Date.now();
     const response = await fetch(joinBaseUrl(key.baseUrl, "/v1/messages"), {
       method: "POST",
       headers: {
@@ -902,6 +810,7 @@ async function testAnthropicKey(
       signal: AbortSignal.timeout(20000),
     });
 
+    const latency = Date.now() - startTime;
     const providerResponse = await parseProviderResponse(response);
     const content = extractProviderContent(providerResponse, "anthropic");
 
@@ -912,6 +821,7 @@ async function testAnthropicKey(
         statusCode: response.status,
         message: "测试成功",
         source: candidate.source,
+        latency,
       });
       successfulModel ??= candidate.model;
       if (candidate.source === "preferred") {
@@ -933,6 +843,7 @@ async function testAnthropicKey(
       statusCode: response.status,
       message: lastFailureMessage,
       source: candidate.source,
+      latency,
     });
   }
 
@@ -947,15 +858,18 @@ async function testAnthropicKey(
         ? `Claude 可用（全局优先模型通过：${passedPreferredModels.join("、")}）`
         : `Claude 可用（测试模型：${primaryModel}）`;
     const attemptSummary = buildAttemptSummary(attempts);
+    const avgLatency = calculateAverageLatency(attempts);
+    const latencyInfo = avgLatency ? ` 平均延迟：${avgLatency}ms` : "";
 
     return {
       ok: true,
-      message: attemptSummary ? `${successLabel}\n覆盖测试：${attemptSummary}` : successLabel,
+      message: attemptSummary ? `${successLabel}${latencyInfo}\n覆盖测试：${attemptSummary}` : `${successLabel}${latencyInfo}`,
       statusCode: 200,
       testedAt: new Date().toISOString(),
       discoveredModel: primaryModel,
       discoveredModels: discovered.ids,
       attemptedModels: attempts,
+      averageLatency: avgLatency,
     };
   }
 
@@ -1021,6 +935,7 @@ async function testOpenAiKey(
   let successfulPreferredModel: string | null = null;
 
   for (const candidate of modelsToTest) {
+    const startTime = Date.now();
     const response = await fetch(joinBaseUrl(key.baseUrl, "/chat/completions"), {
       method: "POST",
       headers: {
@@ -1035,6 +950,7 @@ async function testOpenAiKey(
       signal: AbortSignal.timeout(20000),
     });
 
+    const latency = Date.now() - startTime;
     const providerResponse = await parseProviderResponse(response);
     const content = extractProviderContent(providerResponse, "openai");
 
@@ -1045,6 +961,7 @@ async function testOpenAiKey(
         statusCode: response.status,
         message: "测试成功",
         source: candidate.source,
+        latency,
       });
       successfulModel ??= candidate.model;
       if (candidate.source === "preferred") {
@@ -1066,6 +983,7 @@ async function testOpenAiKey(
       statusCode: response.status,
       message: lastFailureMessage,
       source: candidate.source,
+      latency,
     });
   }
 
@@ -1080,15 +998,18 @@ async function testOpenAiKey(
         ? `Codex 可用（全局优先模型通过：${passedPreferredModels.join("、")}）`
         : `Codex 可用（测试模型：${primaryModel}）`;
     const attemptSummary = buildAttemptSummary(attempts);
+    const avgLatency = calculateAverageLatency(attempts);
+    const latencyInfo = avgLatency ? ` 平均延迟：${avgLatency}ms` : "";
 
     return {
       ok: true,
-      message: attemptSummary ? `${successLabel}\n覆盖测试：${attemptSummary}` : successLabel,
+      message: attemptSummary ? `${successLabel}${latencyInfo}\n覆盖测试：${attemptSummary}` : `${successLabel}${latencyInfo}`,
       statusCode: 200,
       testedAt: new Date().toISOString(),
       discoveredModel: primaryModel,
       discoveredModels: discovered.ids,
       attemptedModels: attempts,
+      averageLatency: avgLatency,
     };
   }
 
@@ -1332,6 +1253,24 @@ export async function testManagedKey(id: string) {
     throw new Error("当前 key 已禁用测试。");
   }
 
+  // Check cache
+  if (shouldSkipTest(key)) {
+    const listItem = toListItem(key);
+    return {
+      result: {
+        ok: key.lastTestStatus === "success",
+        message: key.lastTestMessage ?? "使用缓存的测试结果",
+        statusCode: key.lastTestStatus === "success" ? 200 : null,
+        testedAt: key.lastTestAt?.toISOString() ?? new Date().toISOString(),
+        discoveredModel: key.model,
+        discoveredModels: parseJsonArray(key.availableModels),
+        attemptedModels: [],
+        fromCache: true,
+      } as ManagedKeyTestResult,
+      key: listItem,
+    };
+  }
+
   const listItem = toListItem(key);
   const globalConfig = await getGlobalConfig();
   const globalPreferredModels = globalConfig.preferredModels;
@@ -1371,6 +1310,12 @@ export async function testManagedKey(id: string) {
       ? preferredDiscoveredModel ?? pickDiscoveredModel(discoveredModels, listItem.group)
       : null;
 
+  const allAttempts = [
+    ...anthropicResult.attemptedModels,
+    ...openAiResult.attemptedModels,
+  ];
+  const avgLatency = calculateAverageLatency(allAttempts);
+
   const result: ManagedKeyTestResult = {
     ...anthropicResult,
     ok: overallOk,
@@ -1381,6 +1326,8 @@ export async function testManagedKey(id: string) {
     testedAt: new Date().toISOString(),
     discoveredModel,
     discoveredModels,
+    averageLatency: avgLatency,
+    fromCache: false,
   };
 
   await prisma.managedKey.update({

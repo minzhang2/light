@@ -5,6 +5,10 @@ function asTimestamp(value: string) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
+export function normalizeBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, "");
+}
+
 export function compareManagedKeysForDisplay(
   a: ManagedKeyListItem,
   b: ManagedKeyListItem,

@@ -53,7 +53,10 @@ export type ManagedKeyTestResult = {
     statusCode: number | null;
     message: string;
     source: "preferred" | "fallback";
+    latency?: number;
   }>;
+  averageLatency?: number;
+  fromCache?: boolean;
 };
 
 export type ManagedKeyUpdateInput = {
