@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import {
+  isDefaultNoteDocumentTitle,
+  markDefaultNoteDocumentInitialized,
+} from "@/features/notes/service";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 import { prisma } from "@/lib/prisma";
@@ -100,6 +104,10 @@ export async function DELETE(
 
     if (!existing) {
       return NextResponse.json({ message: "笔记不存在。" }, { status: 404 });
+    }
+
+    if (isDefaultNoteDocumentTitle(existing.title)) {
+      await markDefaultNoteDocumentInitialized(session.user.id);
     }
 
     await prisma.noteDocument.delete({ where: { id } });

@@ -13,6 +13,7 @@ export interface NoteDocumentRecord {
 }
 
 const DEFAULT_NOTE_TITLE = "Light 使用说明";
+const DEFAULT_NOTE_INITIALIZED_KEY_PREFIX = "notes:default-note-initialized:";
 const DEFAULT_NOTE_CONTENT = `
 <h1>欢迎使用 Light</h1>
 <p>这是一份系统自动创建的默认使用文档，帮助你快速了解当前可用功能。</p>
@@ -64,7 +65,40 @@ function serializeDocument(document: {
   };
 }
 
+function getDefaultNoteInitializedConfigKey(userId: string) {
+  return `${DEFAULT_NOTE_INITIALIZED_KEY_PREFIX}${userId}`;
+}
+
+export function isDefaultNoteDocumentTitle(title: string) {
+  return title.trim() === DEFAULT_NOTE_TITLE;
+}
+
+export async function markDefaultNoteDocumentInitialized(userId: string) {
+  const key = getDefaultNoteInitializedConfigKey(userId);
+
+  await prisma.appConfig.upsert({
+    where: { key },
+    create: {
+      key,
+      value: "true",
+    },
+    update: {
+      value: "true",
+    },
+  });
+}
+
 export async function ensureDefaultNoteDocument(userId: string) {
+  const key = getDefaultNoteInitializedConfigKey(userId);
+  const initialized = await prisma.appConfig.findUnique({
+    where: { key },
+    select: { key: true },
+  });
+
+  if (initialized) {
+    return;
+  }
+
   const existing = await prisma.noteDocument.findFirst({
     where: {
       userId,
@@ -74,6 +108,7 @@ export async function ensureDefaultNoteDocument(userId: string) {
   });
 
   if (existing) {
+    await markDefaultNoteDocumentInitialized(userId);
     return;
   }
 
@@ -85,6 +120,8 @@ export async function ensureDefaultNoteDocument(userId: string) {
       isPinned: true,
     },
   });
+
+  await markDefaultNoteDocumentInitialized(userId);
 }
 
 export async function listNoteDocuments(userId: string) {
