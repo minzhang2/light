@@ -81,3 +81,17 @@ export async function updateSessionMessages(
     throw new Error(payload?.message ?? "更新消息失败。");
   }
 }
+
+export async function deleteMessage(
+  sessionId: string,
+  messageId: string,
+) {
+  const response = await fetch(`/api/chat/sessions/${sessionId}/messages/${messageId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(payload?.message ?? "删除消息失败。");
+  }
+}
