@@ -376,6 +376,7 @@ export function ManagedKeyManager({
           message: payload.message || `修复成功！已复制到剪贴板。`,
         });
         repairForm.setRepairInput("");
+        setRepairHistory([]);
       } else {
         toast({
           tone: "error",

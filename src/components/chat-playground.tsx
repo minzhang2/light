@@ -388,7 +388,7 @@ export function ChatPlayground({
     abortControllerRef.current = controller;
 
     try {
-      const activeSessionId = await ensureSession(nextMessages[nextMessages.length - 1]?.content ?? "", controller.signal);
+      const activeSessionId = await ensureSession(nextMessages[nextMessages.length - 1]?.content ?? "");
 
       if (controller.signal.aborted || abortControllerRef.current !== controller) {
         return;
