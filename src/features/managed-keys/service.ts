@@ -952,9 +952,12 @@ async function testOpenAiKey(
 
     const latency = Date.now() - startTime;
     const providerResponse = await parseProviderResponse(response);
-    const content = extractProviderContent(providerResponse, "openai");
 
-    if (response.ok && content) {
+    // Treat HTML responses as errors (likely error pages or redirects)
+    const isHtmlResponse = providerResponse.contentType?.includes("text/html");
+    const content = isHtmlResponse ? "" : extractProviderContent(providerResponse, "openai");
+
+    if (response.ok && content && !isHtmlResponse) {
       attempts.push({
         model: candidate.model,
         ok: true,

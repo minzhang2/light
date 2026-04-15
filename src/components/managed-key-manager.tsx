@@ -15,6 +15,8 @@ import {
   PinOffIcon,
   Settings2Icon,
   Trash2Icon,
+  WrenchIcon,
+  UploadIcon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -799,6 +801,27 @@ export function ManagedKeyManager({
   const [editDrafts, setEditDrafts] = useState<Record<string, EditDraft>>({});
   const [isBatchTesting, setIsBatchTesting] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showRepair, setShowRepair] = useState(false);
+  const [repairInput, setRepairInput] = useState("");
+  const [repairBaseUrl, setRepairBaseUrl] = useState("https://new.timefiles.online");
+  const [repairProtocol, setRepairProtocol] = useState<"anthropic" | "openai">("anthropic");
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairCandidates, setRepairCandidates] = useState<string[]>([]);
+  const [repairValidCandidates, setRepairValidCandidates] = useState<string[]>([]);
+  const [repairTestResults, setRepairTestResults] = useState<Array<{ candidate: string; status: "testing" | "success" | "failed" }>>([]);
+  const [repairKeyId, setRepairKeyId] = useState<string>("");
+  const [repairModel, setRepairModel] = useState<string>("");
+  const [repairCustomPrompt, setRepairCustomPrompt] = useState<string>("");
+  const [repairHistory, setRepairHistory] = useState<string[]>([]);
+
+  useEffect(() => {
+    setRepairInput(localStorage.getItem("repair_key") || "");
+    setRepairBaseUrl(localStorage.getItem("repair_baseUrl") || "https://new.timefiles.online");
+    setRepairProtocol((localStorage.getItem("repair_protocol") as "anthropic" | "openai") || "anthropic");
+    setRepairKeyId(localStorage.getItem("repair_keyId") || "");
+    setRepairModel(localStorage.getItem("repair_model") || "");
+    setRepairCustomPrompt(localStorage.getItem("repair_customPrompt") || "");
+  }, []);
   const hasTestingKeys = Object.keys(testingIds).length > 0;
 
   const filteredKeys = useMemo(() => {
@@ -829,6 +852,15 @@ export function ManagedKeyManager({
   const testableFilteredKeys = useMemo(() => {
     return filteredKeys.filter((key) => key.isTestable);
   }, [filteredKeys]);
+
+  const availableClaudeKeys = useMemo(() => {
+    return keys.filter(
+      (key) =>
+        key.isTestable &&
+        key.lastTestStatus === "success" &&
+        key.protocol === "anthropic",
+    );
+  }, [keys]);
 
   const availableKeys = useMemo(() => {
     return filteredKeys
@@ -1310,6 +1342,84 @@ export function ManagedKeyManager({
     };
   }, []);
 
+  async function handleRepairKey() {
+    if (!repairInput.trim()) {
+      toast({ tone: "error", message: "请输入损坏的 key。" });
+      return;
+    }
+
+    setIsRepairing(true);
+    setRepairCandidates([]);
+    setRepairValidCandidates([]);
+    setRepairTestResults([]);
+
+    try {
+      const response = await fetch("/api/keys/repair", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          corruptedKey: repairInput.trim(),
+          baseUrl: repairBaseUrl,
+          protocol: repairProtocol,
+          keyId: repairKeyId || undefined,
+          model: repairModel || undefined,
+          customPrompt: repairCustomPrompt.trim() || undefined,
+          previousCandidates: repairHistory,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            success?: boolean;
+            repairedKey?: string;
+            attempts?: number;
+            message?: string;
+            candidates?: string[];
+            validCandidates?: string[];
+            testResults?: Array<{ candidate: string; status: "testing" | "success" | "failed" }>;
+          }
+        | null;
+
+      if (!response.ok || !payload) {
+        throw new Error(payload?.message ?? "修复失败。");
+      }
+
+      if (payload.candidates && payload.candidates.length > 0) {
+        setRepairCandidates(payload.candidates);
+        setRepairHistory((prev) => [...prev, ...payload.candidates!]);
+      }
+
+      if (payload.validCandidates && payload.validCandidates.length > 0) {
+        setRepairValidCandidates(payload.validCandidates);
+      }
+
+      if (payload.testResults && payload.testResults.length > 0) {
+        setRepairTestResults(payload.testResults);
+      }
+
+      if (payload.success && payload.repairedKey) {
+        await navigator.clipboard.writeText(payload.repairedKey);
+        toast({
+          tone: "success",
+          message: payload.message || `修复成功！已复制到剪贴板。`,
+        });
+        setRepairInput("");
+      } else {
+        toast({
+          tone: "error",
+          message: payload.message ?? "未能修复 key。",
+        });
+      }
+    } catch (error) {
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "修复失败。",
+      });
+    } finally {
+      setIsRepairing(false);
+    }
+  }
+
   async function handleBatchTest() {
     if (testableFilteredKeys.length === 0 || isBatchTesting) {
       return;
@@ -1424,8 +1534,17 @@ export function ManagedKeyManager({
               size="sm"
               onClick={() => setShowImport(!showImport)}
             >
+              <UploadIcon className="h-4 w-4" />
               导入
-              {showImport ? <ChevronUpIcon className="ml-1 h-4 w-4" /> : <ChevronDownIcon className="ml-1 h-4 w-4" />}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRepair(!showRepair)}
+            >
+              <WrenchIcon className="h-4 w-4" />
+              修复
             </Button>
             <Button
               type="button"
@@ -1479,6 +1598,186 @@ export function ManagedKeyManager({
               {isImporting ? "导入中..." : "导入并合并"}
             </Button>
           </div>
+        </div>
+      ) : null}
+
+      {/* Collapsible repair */}
+      {showRepair ? (
+        <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold mb-1">修复损坏的 Key</h3>
+            <p className="text-xs text-muted-foreground">
+              输入包含异常字符的损坏 key（如中文、特殊符号等），系统会自动尝试替换并测试可用性。
+            </p>
+          </div>
+          <Input
+            value={repairInput}
+            onChange={(event) => {
+              setRepairInput(event.target.value);
+              localStorage.setItem("repair_key", event.target.value);
+              setRepairHistory([]);
+              setRepairCandidates([]);
+              setRepairValidCandidates([]);
+              setRepairTestResults([]);
+            }}
+            placeholder="例如：sk-AWFh观察者V8ErJswxnk56mKn14W8X9qqfh8RjHZAhX0lqJ5XcH"
+            className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm font-mono outline-none transition focus:border-ring focus:ring-3 focus:ring-ring/50"
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-foreground/60">使用的 Key（可选）</span>
+              <Select
+                value={repairKeyId}
+                onValueChange={(value) => {
+                  setRepairKeyId(value ?? "");
+                  localStorage.setItem("repair_keyId", value ?? "");
+                }}
+              >
+                <SelectTrigger className="h-8 rounded-md px-2 text-sm">
+                  <SelectValue>
+                    {repairKeyId
+                      ? availableClaudeKeys.find((k) => k.id === repairKeyId)?.name ?? "自动选择"
+                      : "自动选择"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">自动选择</SelectItem>
+                  {availableClaudeKeys.map((key) => (
+                    <SelectItem key={key.id} value={key.id}>
+                      {key.name} ({key.maskedSecret})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-foreground/60">使用的模型（可选）</span>
+              <Select
+                value={repairModel}
+                onValueChange={(value) => {
+                  setRepairModel(value ?? "");
+                  localStorage.setItem("repair_model", value ?? "");
+                }}
+              >
+                <SelectTrigger className="h-8 rounded-md px-2 text-sm">
+                  <SelectValue placeholder="自动选择" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">自动选择</SelectItem>
+                  {globalConfig?.preferredModels.map((model) => (
+                    <SelectItem key={model} value={model}>
+                      {model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
+          <label className="space-y-1 mb-2">
+            <span className="text-xs font-medium text-foreground/60">自定义提示符（可选）</span>
+            <Input
+              value={repairCustomPrompt}
+              onChange={(event) => {
+                setRepairCustomPrompt(event.target.value);
+                localStorage.setItem("repair_customPrompt", event.target.value);
+              }}
+              placeholder="留空则使用默认提示符。可以自定义推断规则，例如：需要 2 位小写字母..."
+              className="h-8 rounded-md px-2 text-sm"
+            />
+          </label>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setShowRepair(false);
+                setRepairCandidates([]);
+                setRepairValidCandidates([]);
+                setRepairTestResults([]);
+                setRepairCustomPrompt("");
+                setRepairHistory([]);
+              }}
+              disabled={isRepairing}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleRepairKey}
+              disabled={isRepairing || !repairInput.trim()}
+            >
+              {isRepairing ? "修复中..." : "开始修复"}
+            </Button>
+          </div>
+          {repairValidCandidates.length > 0 ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-emerald-800">✓ 修复成功</h4>
+                <span className="text-xs text-emerald-600">找到 {repairValidCandidates.length} 个可用候选</span>
+              </div>
+              <code className="text-xs font-mono text-emerald-900 break-all">
+                {(() => {
+                  const corruptedPart = repairInput.match(/[\u4e00-\u9fa5]+/)?.[0] || "";
+                  const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
+                  const parts = repairedKey.split(repairValidCandidates[0]);
+                  return (
+                    <>
+                      {parts[0]}
+                      <span className="bg-emerald-300 text-emerald-900 font-bold">{repairValidCandidates[0]}</span>
+                      {parts[1]}
+                    </>
+                  );
+                })()}
+              </code>
+            </div>
+          ) : repairTestResults.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-red-800">✗ 修复失败</h4>
+                  <span className="text-xs text-red-600">已测试 {repairTestResults.length} 个候选</span>
+                </div>
+                <p className="text-xs text-red-700">
+                  AI 生成了 {repairCandidates.length} 个候选字符，测试了 {repairTestResults.length} 个，但均未通过验证。建议检查 Base URL 是否正确，或尝试手动修复。
+                </p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-foreground/80">AI 生成的候选字符</h4>
+                  <span className="text-xs text-muted-foreground">共 {repairCandidates.length} 个</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {repairCandidates.map((candidate, index) => (
+                    <span
+                      key={index}
+                      className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-mono text-sky-700"
+                    >
+                      {candidate}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : repairCandidates.length > 0 ? (
+            <div className="rounded-xl border border-border/70 bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-semibold text-foreground/80">AI 生成的候选字符</h4>
+                <span className="text-xs text-muted-foreground">共 {repairCandidates.length} 个</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {repairCandidates.map((candidate, index) => (
+                  <span
+                    key={index}
+                    className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-mono text-sky-700"
+                  >
+                    {candidate}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
