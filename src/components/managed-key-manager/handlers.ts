@@ -12,7 +12,7 @@ export interface HandlerDependencies {
   setEditingIds: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
   setEditDrafts: (fn: (prev: Record<string, EditDraft>) => Record<string, EditDraft>) => void;
   setDeleteTargetId: (fn: (prev: string | null) => string | null) => void;
-  toast: (options: { tone: string; message: string; duration?: number }) => string | null;
+  toast: (input: { message: string; tone?: "success" | "error" | "info"; duration?: number }) => string;
 }
 
 export function createHandlers(deps: HandlerDependencies) {
