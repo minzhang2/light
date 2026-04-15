@@ -376,10 +376,9 @@ export function ManagedKeyManager({
       }
 
       if (payload.success && payload.repairedKey) {
-        await navigator.clipboard.writeText(payload.repairedKey);
         toast({
           tone: "success",
-          message: payload.message || `修复成功！已复制到剪贴板。`,
+          message: payload.message || `修复成功！`,
         });
         repairForm.setRepairInput("");
         setRepairHistory([]);
