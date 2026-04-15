@@ -34,7 +34,7 @@ import { useToast } from "@/components/ui/toast";
 import type { MailAccount, Mailbox, Email, LogEntry, DomainValue } from "./mail-container/types";
 import { DOMAINS, API_BASE } from "./mail-container/types";
 import { MailboxSidebar } from "./mail-container/sidebar";
-import { now, isSuccessResponse, getApiEcho, getPayload } from "./mail-container/api-utils";
+import { now, isSuccessResponse, getApiEcho, getPayload, asRecord } from "./mail-container/api-utils";
 
 function normalizeMailbox(value: unknown): Mailbox | null {
   const record = asRecord(value);
