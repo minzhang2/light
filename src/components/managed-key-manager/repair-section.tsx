@@ -162,9 +162,9 @@ export function RepairSection({
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-emerald-800">✓ 修复成功</h4>
-            <span className="text-xs text-emerald-600">找到 {repairValidCandidates.length} 个可用候选</span>
+            <span className="text-xs text-emerald-600 cursor-pointer">找到 {repairValidCandidates.length} 个可用候选</span>
           </div>
-          <code className="text-xs font-mono text-emerald-900 break-all">
+          <code className="block text-xs font-mono text-emerald-900 break-all">
             {(() => {
               const corruptedPart = repairInput.match(/[\u4e00-\u9fa5]+/)?.[0] || "";
               const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
@@ -173,7 +173,7 @@ export function RepairSection({
               return (
                 <>
                   {repairedKey.slice(0, beforeIndex)}
-                  <span className="bg-emerald-300 text-emerald-900 font-bold">{repairValidCandidates[0]}</span>
+                  <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
                   {repairedKey.slice(afterIndex)}
                 </>
               );
