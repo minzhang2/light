@@ -305,7 +305,7 @@ export function ChatPlayground({
     abortControllerRef.current = controller;
 
     try {
-      const activeSessionId = await ensureSession(content || formatAttachmentNames(filesToSend), controller.signal);
+      const activeSessionId = await ensureSession(content || formatAttachmentNames(filesToSend));
 
       if (controller.signal.aborted || abortControllerRef.current !== controller) {
         return;
