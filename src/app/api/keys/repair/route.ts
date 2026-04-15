@@ -185,9 +185,13 @@ key 的正确总长度应该是: ${targetLength} 个字符
     const testedCandidates = new Set<string>();
     const testResults: Array<{ candidate: string; status: "testing" | "success" | "failed" }> = [];
 
-    for (const candidate of candidates) {
+    // 使用 AbortController 来取消其他请求
+    const abortController = new AbortController();
+
+    // 创建所有测试任务
+    const testPromises = candidates.map(async (candidate) => {
       if (testedCandidates.has(candidate)) {
-        continue;
+        return null;
       }
 
       testedCandidates.add(candidate);
@@ -197,27 +201,54 @@ key 的正确总长度应该是: ${targetLength} 个字符
 
       if (repairedKey.length !== targetLength) {
         testResults.push({ candidate, status: "failed" });
-        continue;
+        return null;
       }
 
-      const isValid = await testKeyValidity(repairedKey, baseUrl, protocol);
+      try {
+        // 检查是否已经被取消
+        if (abortController.signal.aborted) {
+          return null;
+        }
 
-      if (isValid) {
-        validCandidates.push(candidate);
-        testResults.push({ candidate, status: "success" });
+        const isValid = await testKeyValidity(repairedKey, baseUrl, protocol, abortController.signal);
 
-        // 找到可用的就立即返回
-        return {
-          success: true,
-          repairedKey: corruptedKey.replace(chineseText, validCandidates[0]),
-          attempts: attempt,
-          candidates,
-          validCandidates,
-          testResults,
-        };
-      } else {
+        if (isValid) {
+          validCandidates.push(candidate);
+          testResults.push({ candidate, status: "success" });
+          // 取消其他所有请求
+          abortController.abort();
+          return candidate;
+        } else {
+          testResults.push({ candidate, status: "failed" });
+          return null;
+        }
+      } catch (error) {
+        // 如果是因为 abort 导致的错误，忽略
+        if (error instanceof Error && error.name === "AbortError") {
+          return null;
+        }
         testResults.push({ candidate, status: "failed" });
+        return null;
       }
+    });
+
+    // 等待所有测试完成或找到第一个成功的
+    const results = await Promise.allSettled(testPromises);
+
+    // 找到第一个成功的候选
+    const successfulCandidate = results
+      .map((result) => result.status === "fulfilled" ? result.value : null)
+      .find((value) => value !== null);
+
+    if (successfulCandidate) {
+      return {
+        success: true,
+        repairedKey: corruptedKey.replace(chineseText, successfulCandidate),
+        attempts: attempt,
+        candidates,
+        validCandidates,
+        testResults,
+      };
     }
 
     return {
@@ -242,6 +273,7 @@ async function testKeyValidity(
   key: string,
   baseUrl: string,
   protocol: "anthropic" | "openai",
+  signal?: AbortSignal,
 ): Promise<boolean> {
   try {
     if (protocol === "anthropic") {
@@ -252,7 +284,7 @@ async function testKeyValidity(
           authorization: `Bearer ${key}`,
           "x-api-key": key,
         },
-        signal: AbortSignal.timeout(10000),
+        signal: signal || AbortSignal.timeout(10000),
       });
       return response.ok;
     } else {
@@ -261,7 +293,7 @@ async function testKeyValidity(
         headers: {
           authorization: `Bearer ${key}`,
         },
-        signal: AbortSignal.timeout(10000),
+        signal: signal || AbortSignal.timeout(10000),
       });
       return response.ok;
     }

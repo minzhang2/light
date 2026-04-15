@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToast } from "@/components/ui/toast";
 import type { GlobalConfig, ManagedKeyListItem } from "@/features/managed-keys/types";
 
 export function RepairSection({
@@ -48,6 +49,8 @@ export function RepairSection({
   onCancel: () => void;
   onInputChange: (value: string) => void;
 }) {
+  const { toast } = useToast();
+
   return (
     <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
       <div>
@@ -162,23 +165,42 @@ export function RepairSection({
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-emerald-800">✓ 修复成功</h4>
-            <span className="text-xs text-emerald-600 cursor-pointer">找到 {repairValidCandidates.length} 个可用候选</span>
+            <span className="text-xs text-emerald-600">找到 {repairValidCandidates.length} 个可用候选</span>
           </div>
-          <code className="block text-xs font-mono text-emerald-900 break-all">
-            {(() => {
-              const corruptedPart = repairInput.match(/[\u4e00-\u9fa5]+/)?.[0] || "";
-              const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
-              const beforeIndex = repairInput.indexOf(corruptedPart);
-              const afterIndex = beforeIndex + repairValidCandidates[0].length;
-              return (
-                <>
-                  {repairedKey.slice(0, beforeIndex)}
-                  <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
-                  {repairedKey.slice(afterIndex)}
-                </>
-              );
-            })()}
-          </code>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs font-mono text-emerald-900 break-all">
+              {(() => {
+                const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
+                const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
+                const beforeIndex = repairInput.indexOf(corruptedPart);
+                const afterIndex = beforeIndex + repairValidCandidates[0].length;
+                return (
+                  <>
+                    {repairedKey.slice(0, beforeIndex)}
+                    <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
+                    {repairedKey.slice(afterIndex)}
+                  </>
+                );
+              })()}
+            </code>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 shrink-0 text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100"
+              onClick={() => {
+                const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
+                const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
+                navigator.clipboard.writeText(repairedKey).then(() => {
+                  toast({ tone: "success", message: "已复制修复后的 key" });
+                }).catch(() => {
+                  toast({ tone: "error", message: "复制失败，请手动复制" });
+                });
+              }}
+            >
+              复制
+            </Button>
+          </div>
         </div>
       ) : repairTestResults.length > 0 ? (
         <div className="space-y-3">
