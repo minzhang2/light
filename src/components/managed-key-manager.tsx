@@ -503,18 +503,26 @@ export function ManagedKeyManager({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={showImport ? "default" : "outline"}
               size="sm"
-              onClick={() => setShowImport(!showImport)}
+              onClick={() => {
+                setShowImport(!showImport);
+                setShowRepair(false);
+                setShowSettings(false);
+              }}
             >
               <UploadIcon className="h-4 w-4" />
               导入
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={showRepair ? "default" : "outline"}
               size="sm"
-              onClick={() => setShowRepair(!showRepair)}
+              onClick={() => {
+                setShowRepair(!showRepair);
+                setShowImport(false);
+                setShowSettings(false);
+              }}
             >
               <WrenchIcon className="h-4 w-4" />
               修复
@@ -531,6 +539,8 @@ export function ManagedKeyManager({
                   );
                 }
                 setShowSettings(!showSettings);
+                setShowImport(false);
+                setShowRepair(false);
               }}
             >
               <Settings2Icon className="h-4 w-4" />
