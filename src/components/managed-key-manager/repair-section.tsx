@@ -25,6 +25,7 @@ export function RepairSection({
   isRepairing,
   repairCandidates,
   repairValidCandidates,
+  repairRepairedKey,
   repairTestResults,
   onRepair,
   onCancel,
@@ -44,6 +45,7 @@ export function RepairSection({
   isRepairing: boolean;
   repairCandidates: string[];
   repairValidCandidates: string[];
+  repairRepairedKey: string;
   repairTestResults: Array<{ candidate: string; status: "testing" | "success" | "failed" }>;
   onRepair: () => void;
   onCancel: () => void;
@@ -161,9 +163,9 @@ export function RepairSection({
           {isRepairing ? "修复中..." : "开始修复"}
         </Button>
       </div>
-      {repairValidCandidates.length > 0 ? (
+      {repairValidCandidates.length > 0 && repairRepairedKey ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <h4 className="text-sm font-semibold text-emerald-800">✓ 修复成功</h4>
             <span className="text-xs text-emerald-600">找到 {repairValidCandidates.length} 个可用候选</span>
           </div>
@@ -173,19 +175,21 @@ export function RepairSection({
                 const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
 
                 if (!corruptedPart) {
-                  // 如果没有找到异常字符，直接显示完整的修复后的 key
-                  return repairInput;
+                  return repairRepairedKey;
                 }
 
-                const beforeCorrupted = repairInput.indexOf(corruptedPart);
-                const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
+                const beforeCorrupted = repairRepairedKey.indexOf(repairValidCandidates[0]);
+                if (beforeCorrupted === -1) {
+                  return repairRepairedKey;
+                }
+
                 const afterReplaced = beforeCorrupted + repairValidCandidates[0].length;
 
                 return (
                   <>
-                    {repairedKey.slice(0, beforeCorrupted)}
+                    {repairRepairedKey.slice(0, beforeCorrupted)}
                     <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
-                    {repairedKey.slice(afterReplaced)}
+                    {repairRepairedKey.slice(afterReplaced)}
                   </>
                 );
               })()}
@@ -196,9 +200,7 @@ export function RepairSection({
               variant="ghost"
               className="h-7 shrink-0 text-xs text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100"
               onClick={() => {
-                const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
-                const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
-                navigator.clipboard.writeText(repairedKey).then(() => {
+                navigator.clipboard.writeText(repairRepairedKey).then(() => {
                   toast({ tone: "success", message: "已复制修复后的 key" });
                 }).catch(() => {
                   toast({ tone: "error", message: "复制失败，请手动复制" });

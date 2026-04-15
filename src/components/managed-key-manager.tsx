@@ -74,6 +74,7 @@ export function ManagedKeyManager({
   const [isRepairing, setIsRepairing] = useState(false);
   const [repairCandidates, setRepairCandidates] = useState<string[]>([]);
   const [repairValidCandidates, setRepairValidCandidates] = useState<string[]>([]);
+  const [repairRepairedKey, setRepairRepairedKey] = useState<string>("");
   const [repairTestResults, setRepairTestResults] = useState<Array<{ candidate: string; status: "testing" | "success" | "failed" }>>([]);
   const [repairHistory, setRepairHistory] = useState<string[]>([]);
 
@@ -342,6 +343,7 @@ export function ManagedKeyManager({
     setIsRepairing(true);
     setRepairCandidates([]);
     setRepairValidCandidates([]);
+    setRepairRepairedKey("");
     setRepairTestResults([]);
 
     try {
@@ -363,6 +365,10 @@ export function ManagedKeyManager({
 
       if (payload.validCandidates && payload.validCandidates.length > 0) {
         setRepairValidCandidates(payload.validCandidates);
+      }
+
+      if (payload.repairedKey) {
+        setRepairRepairedKey(payload.repairedKey);
       }
 
       if (payload.testResults && payload.testResults.length > 0) {
@@ -579,12 +585,14 @@ export function ManagedKeyManager({
           isRepairing={isRepairing}
           repairCandidates={repairCandidates}
           repairValidCandidates={repairValidCandidates}
+          repairRepairedKey={repairRepairedKey}
           repairTestResults={repairTestResults}
           onRepair={handleRepairKey}
           onCancel={() => {
             setShowRepair(false);
             setRepairCandidates([]);
             setRepairValidCandidates([]);
+            setRepairRepairedKey("");
             setRepairTestResults([]);
             repairForm.setRepairCustomPrompt("");
             setRepairHistory([]);
