@@ -51,7 +51,18 @@ body,
 }
 
 .tiptap.ProseMirror {
+  position: relative;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
   font-family: "DM Sans", sans-serif;
+
+  pre {
+    white-space: pre-wrap;
+  }
 }
 
 .simple-editor-wrapper {

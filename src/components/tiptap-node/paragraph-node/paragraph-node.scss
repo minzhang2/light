@@ -30,6 +30,7 @@
      ===================== */
 .tiptap.ProseMirror {
   white-space: pre-wrap;
+  white-space: break-spaces;
   outline: none;
   caret-color: var(--tt-cursor-color);
 
