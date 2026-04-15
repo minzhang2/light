@@ -165,10 +165,16 @@ key 的正确总长度应该是: ${targetLength} 个字符
 
     const aiText = aiResult.content[0]?.text || "";
 
-    const candidates = aiText
+    const allCandidates = aiText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length === missingLength && /^[a-zA-Z0-9]+$/.test(line));
+
+    // 去重：过滤掉 AI 生成的重复候选和之前失败过的候选
+    const previousSet = new Set(previousCandidates || []);
+    const candidates = [...new Set(allCandidates)].filter(
+      (candidate) => !previousSet.has(candidate)
+    );
 
     if (candidates.length === 0) {
       return {

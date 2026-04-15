@@ -162,7 +162,7 @@ export function RepairSection({
         </Button>
       </div>
       {repairValidCandidates.length > 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-emerald-800">✓ 修复成功</h4>
             <span className="text-xs text-emerald-600">找到 {repairValidCandidates.length} 个可用候选</span>
@@ -171,9 +171,16 @@ export function RepairSection({
             <code className="flex-1 text-xs font-mono text-emerald-900 break-all">
               {(() => {
                 const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
+
+                if (!corruptedPart) {
+                  // 如果没有找到异常字符，直接显示完整的修复后的 key
+                  return repairInput;
+                }
+
                 const beforeCorrupted = repairInput.indexOf(corruptedPart);
                 const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
                 const afterReplaced = beforeCorrupted + repairValidCandidates[0].length;
+
                 return (
                   <>
                     {repairedKey.slice(0, beforeCorrupted)}
