@@ -1,5 +1,5 @@
 import { startTransition } from "react";
-import type { NoteDocument, SaveState } from "./types";
+import type { NoteDocument, SaveState, ViewMode } from "./types";
 import { formatSavedLabel, sortDocuments } from "./utils";
 import * as api from "./api";
 
@@ -8,6 +8,7 @@ export function useDocumentHandlers({
   setDocuments,
   activeId,
   setActiveId,
+  viewMode,
   setViewMode,
   saveState,
   setSaveState,
@@ -24,6 +25,7 @@ export function useDocumentHandlers({
   setDocuments: React.Dispatch<React.SetStateAction<NoteDocument[]>>;
   activeId: string | null;
   setActiveId: React.Dispatch<React.SetStateAction<string | null>>;
+  viewMode: ViewMode;
   setViewMode: React.Dispatch<React.SetStateAction<"edit" | "preview">>;
   saveState: SaveState;
   setSaveState: React.Dispatch<React.SetStateAction<SaveState>>;
@@ -37,7 +39,7 @@ export function useDocumentHandlers({
   toast: (options: { tone: string; message: string }) => void;
 }) {
   async function handleToggleViewMode() {
-    if (saveState === "preview") {
+    if (viewMode === "preview") {
       setViewMode("edit");
       return;
     }

@@ -23,6 +23,7 @@ import {
   attachmentToDataUrl,
   decodeAttachmentText,
   buildStoredUserContent,
+  formatAttachmentSummary,
 } from "./service/utils";
 
 function buildAnthropicMessages(

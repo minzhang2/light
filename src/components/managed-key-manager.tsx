@@ -556,7 +556,6 @@ export function ManagedKeyManager({
       {showRepair ? (
         <RepairSection
           repairInput={repairForm.repairInput}
-          setRepairInput={repairForm.setRepairInput}
           repairMaxCandidates={repairForm.repairMaxCandidates}
           setRepairMaxCandidates={repairForm.setRepairMaxCandidates}
           repairKeyId={repairForm.repairKeyId}

@@ -1,4 +1,4 @@
-import type { ManagedKeyListItem } from "@/features/managed-keys/types";
+import type { ManagedKeyListItem, ManagedKeyTestResult } from "@/features/managed-keys/types";
 import {
   extractAnthropicText,
   extractOpenAiText,
@@ -318,12 +318,12 @@ export function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedMod
   }
 
   const orderedAttempts = [
-    ...attempts.filter((attempt) => attempt.ok),
-    ...attempts.filter((attempt) => !attempt.ok),
+    ...attempts.filter((attempt: ManagedKeyTestResult["attemptedModels"][number]) => attempt.ok),
+    ...attempts.filter((attempt: ManagedKeyTestResult["attemptedModels"][number]) => !attempt.ok),
   ];
 
   return orderedAttempts
-    .map((attempt) => {
+    .map((attempt: ManagedKeyTestResult["attemptedModels"][number]) => {
       if (attempt.ok) {
         const latencyInfo = attempt.latency ? ` ${attempt.latency}ms` : "";
         return `${attempt.model}${latencyInfo}`;
@@ -336,14 +336,14 @@ export function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedMod
 
 export function calculateAverageLatency(attempts: ManagedKeyTestResult["attemptedModels"]): number | undefined {
   const latencies = attempts
-    .filter((attempt) => attempt.ok && typeof attempt.latency === "number")
-    .map((attempt) => attempt.latency as number);
+    .filter((attempt: ManagedKeyTestResult["attemptedModels"][number]) => attempt.ok && typeof attempt.latency === "number")
+    .map((attempt: ManagedKeyTestResult["attemptedModels"][number]) => attempt.latency as number);
 
   if (latencies.length === 0) {
     return undefined;
   }
 
-  return Math.round(latencies.reduce((sum, lat) => sum + lat, 0) / latencies.length);
+  return Math.round(latencies.reduce((sum: number, lat: number) => sum + lat, 0) / latencies.length);
 }
 
 export function summarizeTagAvailability(input: {
@@ -372,7 +372,7 @@ export function summarizeTagAvailability(input: {
     [
       ...new Set(
         input.results.flatMap((result) =>
-          result.discoveredModels.filter((model) =>
+          result.discoveredModels.filter((model: string) =>
             input.tag === "claude" ? isClaudeFamilyModel(model) : !isClaudeFamilyModel(model),
           ),
         ),
