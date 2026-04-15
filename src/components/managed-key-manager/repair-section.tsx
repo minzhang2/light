@@ -171,14 +171,14 @@ export function RepairSection({
             <code className="flex-1 text-xs font-mono text-emerald-900 break-all">
               {(() => {
                 const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
+                const beforeCorrupted = repairInput.indexOf(corruptedPart);
                 const repairedKey = repairInput.replace(corruptedPart, repairValidCandidates[0]);
-                const beforeIndex = repairInput.indexOf(corruptedPart);
-                const afterIndex = beforeIndex + repairValidCandidates[0].length;
+                const afterReplaced = beforeCorrupted + repairValidCandidates[0].length;
                 return (
                   <>
-                    {repairedKey.slice(0, beforeIndex)}
+                    {repairedKey.slice(0, beforeCorrupted)}
                     <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
-                    {repairedKey.slice(afterIndex)}
+                    {repairedKey.slice(afterReplaced)}
                   </>
                 );
               })()}
