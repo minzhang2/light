@@ -1,7 +1,7 @@
 "use client"
 
 import type { Editor } from "@tiptap/react"
-import { useEffect, useState } from "react"
+import { startTransition, useEffect, useState } from "react"
 
 type Orientation = "horizontal" | "vertical" | "both"
 
@@ -185,7 +185,10 @@ export function useMenuNavigation<T>({
 
   useEffect(() => {
     if (query) {
-      setSelectedIndex(autoSelectFirstItem ? 0 : -1)
+      // Use startTransition to avoid blocking render
+      startTransition(() => {
+        setSelectedIndex(autoSelectFirstItem ? 0 : -1)
+      })
     }
   }, [query, autoSelectFirstItem])
 

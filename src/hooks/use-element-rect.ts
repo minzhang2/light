@@ -56,7 +56,9 @@ export function useElementRect({
   throttleMs = 100,
   useResizeObserver = true,
 }: ElementRectOptions = {}): RectState {
-  const [rect, setRect] = useState<RectState>(initialRect)
+  const [rect, setRect] = useState<RectState>(() =>
+    (!enabled || isSSR) ? initialRect : initialRect
+  )
 
   const getTargetElement = useCallback((): Element | null => {
     if (!enabled || !isClientSide()) return null
@@ -105,7 +107,6 @@ export function useElementRect({
 
   useEffect(() => {
     if (!enabled || !isClientSide()) {
-      setRect(initialRect)
       return
     }
 

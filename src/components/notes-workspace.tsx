@@ -2,18 +2,8 @@
 
 import { startTransition, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
-  AlertCircleIcon,
-  CloudIcon,
-  CopyIcon,
-  EyeIcon,
   FilePlus2Icon,
   FileTextIcon,
-  LockIcon,
-  MenuIcon,
-  PencilLineIcon,
-  PinIcon,
-  Share2Icon,
-  Trash2Icon,
 } from "lucide-react";
 
 import { DashboardPageHeader } from "@/components/dashboard-page-header";
@@ -27,7 +17,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -36,35 +25,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  formatInAppTimeZone,
-  getTimeZoneDayIndex,
-} from "@/lib/date-time";
-import { cn } from "@/lib/utils";
-
-interface NoteDocument {
-  id: string;
-  title: string;
-  content: string;
-  isPinned: boolean;
-  isShared: boolean;
-  shareToken: string | null;
-  sharedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-type ViewMode = "edit" | "preview";
-
-const AUTO_SAVE_DEBOUNCE_MS = 1800;
+import type { NoteDocument, SaveState, ViewMode } from "./notes-workspace/types";
+import { AUTO_SAVE_DEBOUNCE_MS } from "./notes-workspace/types";
+import { formatSavedLabel, sortDocuments, buildShareUrl } from "./notes-workspace/utils";
+import { EditorHeader } from "./notes-workspace/editor-header";
+import { NotesSidebar } from "./notes-workspace/sidebar";
+import * as api from "./notes-workspace/api";
 
 export function NotesWorkspace({
   initialDocuments,
@@ -110,14 +77,6 @@ export function NotesWorkspace({
   const activeShareUrl = activeDocument?.shareToken
     ? buildShareUrl(activeDocument.shareToken, clientOrigin)
     : null;
-
-  function buildShareUrl(shareToken: string, origin = clientOrigin) {
-    if (!origin) {
-      return `/share/note/${shareToken}`;
-    }
-
-    return `${origin}/share/note/${shareToken}`;
-  }
 
   function isDocumentDirty(document: NoteDocument) {
     const lastSaved = lastSavedMap[document.id];
@@ -172,79 +131,60 @@ export function NotesWorkspace({
     setSaveState("saving");
     setSaveMessage("正在保存...");
 
-    const response = await fetch(`/api/note-documents/${snapshot.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const savedDocument = await api.updateDocument(snapshot.id, {
         title: snapshot.title,
         content: snapshot.content,
-      }),
-    });
+      });
 
-    const payload = (await response.json().catch(() => null)) as
-      | { document?: NoteDocument; message?: string }
-      | null;
+      let hasNewerLocalChanges = false;
 
-    if (!response.ok || !payload?.document) {
-      setSaveState("error");
-      setSaveMessage(payload?.message ?? "保存失败，请稍后再试");
-      return;
-    }
+      setDocuments((currentDocuments) =>
+        currentDocuments
+          .map((currentDocument) => {
+            if (currentDocument.id !== savedDocument.id) {
+              return currentDocument;
+            }
 
-    const savedDocument = payload.document;
+            hasNewerLocalChanges =
+              currentDocument.title !== snapshot.title ||
+              currentDocument.content !== snapshot.content;
 
-    let hasNewerLocalChanges = false;
+            if (!hasNewerLocalChanges) {
+              return savedDocument;
+            }
 
-    setDocuments((currentDocuments) =>
-      currentDocuments
-        .map((currentDocument) => {
-          if (currentDocument.id !== savedDocument.id) {
-            return currentDocument;
-          }
+            return {
+              ...currentDocument,
+              updatedAt: savedDocument.updatedAt,
+              isPinned: savedDocument.isPinned,
+              isShared: savedDocument.isShared,
+              shareToken: savedDocument.shareToken,
+              sharedAt: savedDocument.sharedAt,
+            };
+          })
+          .sort(sortDocuments),
+      );
+      setLastSavedMap((currentMap) => ({
+        ...currentMap,
+        [savedDocument.id]: {
+          title: snapshot.title,
+          content: snapshot.content,
+        },
+      }));
 
-          hasNewerLocalChanges =
-            currentDocument.title !== snapshot.title ||
-            currentDocument.content !== snapshot.content;
+      if (hasNewerLocalChanges || pendingResaveRef.current) {
+        setSaveState("dirty");
+        setSaveMessage(formatSavedLabel(savedDocument.updatedAt));
+        return;
+      }
 
-          if (!hasNewerLocalChanges) {
-            return savedDocument;
-          }
-
-          return {
-            ...currentDocument,
-            updatedAt: savedDocument.updatedAt,
-            isPinned: savedDocument.isPinned,
-            isShared: savedDocument.isShared,
-            shareToken: savedDocument.shareToken,
-            sharedAt: savedDocument.sharedAt,
-          };
-        })
-        .sort(sortDocuments),
-    );
-    setLastSavedMap((currentMap) => ({
-      ...currentMap,
-      [savedDocument.id]: {
-        title: snapshot.title,
-        content: snapshot.content,
-      },
-    }));
-
-    if (hasNewerLocalChanges || pendingResaveRef.current) {
-      setSaveState("dirty");
+      setSaveState("saved");
       setSaveMessage(formatSavedLabel(savedDocument.updatedAt));
-      return;
+    } catch (error) {
+      setSaveState("error");
+      setSaveMessage(error instanceof Error ? error.message : "保存失败，请稍后再试");
     }
-
-    setSaveState("saved");
-    setSaveMessage(formatSavedLabel(savedDocument.updatedAt));
-  }
-
-  async function handleSaveActiveDocument() {
-    if (!activeDocument) {
-      return;
-    }
-
-    await saveDocument(activeDocument);
   }
 
   async function handleToggleViewMode() {
@@ -263,24 +203,8 @@ export function NotesWorkspace({
   async function handleCreateDocument() {
     setBusyAction("creating");
     try {
-      const response = await fetch("/api/note-documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `新建笔记 ${documents.length + 1}`,
-        }),
-      });
-      const payload = (await response.json().catch(() => null)) as
-        | { document?: NoteDocument; message?: string }
-        | null;
+      const document = await api.createDocument(`新建笔记 ${documents.length + 1}`);
 
-      if (!response.ok || !payload?.document) {
-        setSaveState("error");
-        setSaveMessage(payload?.message ?? "新建笔记失败");
-        return;
-      }
-
-      const document = payload.document;
       setDocuments((currentDocuments) =>
         [...currentDocuments, document].sort(sortDocuments),
       );
@@ -297,6 +221,9 @@ export function NotesWorkspace({
       });
       setSaveState("saved");
       setSaveMessage(formatSavedLabel(document.updatedAt));
+    } catch (error) {
+      setSaveState("error");
+      setSaveMessage(error instanceof Error ? error.message : "新建笔记失败");
     } finally {
       setBusyAction(null);
     }
@@ -305,18 +232,7 @@ export function NotesWorkspace({
   async function handleDeleteDocument(documentId: string) {
     setBusyAction("deleting");
     try {
-      const response = await fetch(`/api/note-documents/${documentId}`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json().catch(() => null)) as
-        | { ok?: boolean; message?: string }
-        | null;
-
-      if (!response.ok) {
-        setSaveState("error");
-        setSaveMessage(payload?.message ?? "删除笔记失败");
-        return;
-      }
+      await api.deleteDocument(documentId);
 
       const nextDocuments = documents.filter(
         (document) => document.id !== documentId,
@@ -347,39 +263,34 @@ export function NotesWorkspace({
         tone: "success",
         message: "笔记已删除",
       });
+    } catch (error) {
+      setSaveState("error");
+      setSaveMessage(error instanceof Error ? error.message : "删除笔记失败");
     } finally {
       setBusyAction(null);
     }
   }
 
   async function handleTogglePinned(document: NoteDocument) {
-    const response = await fetch(`/api/note-documents/${document.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const updated = await api.updateDocument(document.id, {
         isPinned: !document.isPinned,
-      }),
-    });
-    const payload = (await response.json().catch(() => null)) as
-      | { document?: NoteDocument; message?: string }
-      | null;
+      });
 
-    if (!response.ok || !payload?.document) {
+      setDocuments((currentDocuments) =>
+        currentDocuments
+          .map((item) =>
+            item.id === document.id
+              ? { ...item, isPinned: updated.isPinned, updatedAt: updated.updatedAt }
+              : item,
+          )
+          .sort(sortDocuments),
+      );
+      setSaveMessage(updated.isPinned ? "已置顶" : "已取消置顶");
+    } catch (error) {
       setSaveState("error");
-      setSaveMessage(payload?.message ?? "置顶状态更新失败");
-      return;
+      setSaveMessage(error instanceof Error ? error.message : "置顶状态更新失败");
     }
-
-    setDocuments((currentDocuments) =>
-      currentDocuments
-        .map((item) =>
-          item.id === document.id
-            ? { ...item, isPinned: payload.document!.isPinned, updatedAt: payload.document!.updatedAt }
-            : item,
-        )
-        .sort(sortDocuments),
-    );
-    setSaveMessage(payload.document.isPinned ? "已置顶" : "已取消置顶");
   }
 
   async function handleEnableShare() {
@@ -387,49 +298,43 @@ export function NotesWorkspace({
       return;
     }
 
-    const response = await fetch(`/api/note-documents/${activeDocument.id}/share`, {
-      method: "POST",
-    });
-    const payload = (await response.json().catch(() => null)) as
-      | { document?: NoteDocument; message?: string }
-      | null;
-
-    if (!response.ok || !payload?.document || !payload.document.shareToken) {
-      toast({
-        tone: "error",
-        message: payload?.message ?? "开启分享失败",
-      });
-      return;
-    }
-
-    const sharedDocument = payload.document;
-    const shareToken = sharedDocument.shareToken;
-    if (!shareToken) {
-      toast({
-        tone: "error",
-        message: "分享链接生成失败",
-      });
-      return;
-    }
-    setDocuments((currentDocuments) =>
-      currentDocuments.map((document) =>
-        document.id === sharedDocument.id ? sharedDocument : document,
-      ),
-    );
-
-    const shareUrl = buildShareUrl(shareToken);
-
     try {
-      await navigator.clipboard.writeText(shareUrl);
+      const sharedDocument = await api.enableShare(activeDocument.id);
+      const shareToken = sharedDocument.shareToken;
+
+      if (!shareToken) {
+        toast({
+          tone: "error",
+          message: "分享链接生成失败",
+        });
+        return;
+      }
+
+      setDocuments((currentDocuments) =>
+        currentDocuments.map((document) =>
+          document.id === sharedDocument.id ? sharedDocument : document,
+        ),
+      );
+
+      const shareUrl = buildShareUrl(shareToken, clientOrigin);
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          tone: "success",
+          message: "分享链接已复制",
+        });
+      } catch {
+        toast({
+          tone: "info",
+          message: shareUrl,
+          duration: 5000,
+        });
+      }
+    } catch (error) {
       toast({
-        tone: "success",
-        message: "分享链接已复制",
-      });
-    } catch {
-      toast({
-        tone: "info",
-        message: shareUrl,
-        duration: 5000,
+        tone: "error",
+        message: error instanceof Error ? error.message : "开启分享失败",
       });
     }
   }
@@ -461,22 +366,8 @@ export function NotesWorkspace({
 
     setIsDisablingShare(true);
     try {
-      const response = await fetch(`/api/note-documents/${activeDocument.id}/share`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json().catch(() => null)) as
-        | { document?: NoteDocument; message?: string }
-        | null;
+      const document = await api.disableShare(activeDocument.id);
 
-      if (!response.ok || !payload?.document) {
-        toast({
-          tone: "error",
-          message: payload?.message ?? "关闭分享失败",
-        });
-        return;
-      }
-
-      const document = payload.document;
       setDocuments((currentDocuments) =>
         currentDocuments.map((item) =>
           item.id === document.id ? document : item,
@@ -486,6 +377,11 @@ export function NotesWorkspace({
       toast({
         tone: "success",
         message: "已关闭分享",
+      });
+    } catch (error) {
+      toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "关闭分享失败",
       });
     } finally {
       setIsDisablingShare(false);
@@ -513,13 +409,6 @@ export function NotesWorkspace({
   }
 
   const isActiveDirty = activeDocument ? isDocumentDirty(activeDocument) : false;
-  const isNotesInitialLoading = referenceNow === null;
-  const SaveStatusIcon = saveState === "error"
-    ? AlertCircleIcon
-    : saveState === "saving" || isActiveDirty
-      ? CloudIcon
-      : LockIcon;
-  const activeTitleMeasure = activeDocument?.title || "输入笔记标题";
 
   useEffect(() => {
     setClientOrigin(window.location.origin);
@@ -566,7 +455,7 @@ export function NotesWorkspace({
       return;
     }
 
-    void handleSaveActiveDocument();
+    void saveDocument(activeDocument);
   });
 
   useEffect(() => {
@@ -588,115 +477,6 @@ export function NotesWorkspace({
     };
   }, []);
 
-  const notesSidebar = (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="p-3">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full justify-start gap-2"
-          onClick={() => void handleCreateDocument()}
-          disabled={busyAction === "creating"}
-        >
-          <FilePlus2Icon />
-          新建笔记
-        </Button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-4">
-        {isNotesInitialLoading ? (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            加载中...
-          </p>
-        ) : documents.length === 0 ? (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            暂无笔记
-          </p>
-        ) : (
-          groupDocuments(documents, referenceNow ?? Date.now()).map((group) => (
-            <div key={group.label} className="mb-3">
-              <p className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                {group.label}
-              </p>
-              {group.items.map((document) => (
-                <button
-                  key={document.id}
-                  type="button"
-                  onClick={() => handleSelectDocument(document)}
-                  className={cn(
-                    "group my-1 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent",
-                    document.id === activeId && "bg-accent font-medium",
-                  )}
-                >
-                  <span className="flex-1 truncate">
-                    {document.title || "未命名笔记"}
-                  </span>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleTogglePinned(document);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.stopPropagation();
-                                void handleTogglePinned(document);
-                              }
-                            }}
-                            className={cn(
-                              "flex shrink-0 rounded p-0.5",
-                              document.isPinned
-                                ? "text-primary"
-                                : "text-muted-foreground hover:text-foreground md:opacity-0 md:group-hover:opacity-100",
-                            )}
-                          />
-                        }
-                      >
-                        <PinIcon className="h-3.5 w-3.5" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {document.isPinned ? "取消置顶" : "置顶笔记"}
-                      </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPendingDeleteId(document.id);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.stopPropagation();
-                                setPendingDeleteId(document.id);
-                              }
-                            }}
-                            className="flex shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
-                          />
-                        }
-                      >
-                        <Trash2Icon className="h-3.5 w-3.5" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top">删除笔记</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </button>
-              ))}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-
   return (
     <div className="flex min-h-svh flex-col">
       <DashboardPageHeader
@@ -707,7 +487,16 @@ export function NotesWorkspace({
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="grid h-full min-h-0 gap-0 md:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="hidden min-h-0 border-r border-border/70 bg-background md:flex md:flex-col">
-            {notesSidebar}
+            <NotesSidebar
+              documents={documents}
+              activeId={activeId}
+              referenceNow={referenceNow}
+              busyAction={busyAction}
+              onCreateDocument={() => void handleCreateDocument()}
+              onSelectDocument={handleSelectDocument}
+              onTogglePinned={(doc) => void handleTogglePinned(doc)}
+              onDeleteDocument={setPendingDeleteId}
+            />
           </aside>
 
           <section className="min-h-0 overflow-y-auto bg-background">
@@ -731,113 +520,21 @@ export function NotesWorkspace({
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col">
-                <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-2 md:flex-row md:flex-wrap md:items-center md:justify-between md:px-4">
-                  <div className="min-w-0 flex flex-1 flex-col gap-1 md:flex-row md:flex-wrap md:items-center md:gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMobileSidebarOpen(true)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground md:hidden"
-                        aria-label="打开笔记列表"
-                      >
-                        <MenuIcon className="h-5 w-5" />
-                      </button>
-                      <div className="relative min-w-0 flex-1 overflow-hidden md:w-max md:max-w-[32rem] md:flex-none lg:max-w-[40rem]">
-                        <span
-                          aria-hidden="true"
-                          className="invisible block min-w-[4ch] max-w-full truncate whitespace-pre px-0 py-0 text-xl font-semibold md:text-lg"
-                        >
-                          {activeTitleMeasure}
-                        </span>
-                        <Input
-                          value={activeDocument.title}
-                          onChange={(event) =>
-                            updateActiveDocument({ title: event.target.value })
-                          }
-                          className="absolute inset-0 h-full min-w-0 w-full border-0 bg-transparent px-0 py-0 text-xl font-semibold shadow-none focus-visible:ring-0 md:text-lg"
-                          placeholder="输入笔记标题"
-                        />
-                      </div>
-                    </div>
-                    <div className={cn(
-                      "flex shrink-0 items-center gap-2 text-xs",
-                      saveState === "error" ? "text-destructive" : "text-muted-foreground",
-                    )}>
-                      <SaveStatusIcon
-                        className={cn(
-                          "size-4 shrink-0",
-                          saveState === "error"
-                            ? "text-destructive"
-                            : saveState === "saving"
-                              ? "text-amber-500"
-                              : isActiveDirty
-                                ? "text-sky-500"
-                                : "text-muted-foreground",
-                        )}
-                      />
-                      <span>{saveMessage}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
-                    {activeDocument.isShared ? (
-                      <>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1 sm:flex-none"
-                                  onClick={() => void handleCopyShareLink()}
-                                >
-                                  <CopyIcon />
-                                  复制链接
-                                </Button>
-                              }
-                            />
-                            <TooltipContent
-                              side="top"
-                              className="max-w-sm whitespace-normal break-all"
-                            >
-                              {activeShareUrl}
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 sm:flex-none"
-                          onClick={() => setShareDialogOpen(true)}
-                          disabled={isDisablingShare}
-                        >
-                          <Share2Icon />
-                          关闭分享
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 sm:flex-none"
-                        onClick={() => void handleEnableShare()}
-                      >
-                        <Share2Icon />
-                        分享
-                      </Button>
-                    )}
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="flex-1 sm:flex-none"
-                      onClick={() => void handleToggleViewMode()}
-                    >
-                      {viewMode === "edit" ? <EyeIcon /> : <PencilLineIcon />}
-                      {viewMode === "edit" ? "预览" : "编辑"}
-                    </Button>
-                  </div>
-                </div>
+                <EditorHeader
+                  activeDocument={activeDocument}
+                  saveState={saveState}
+                  saveMessage={saveMessage}
+                  isActiveDirty={isActiveDirty}
+                  viewMode={viewMode}
+                  onTitleChange={(title) => updateActiveDocument({ title })}
+                  onToggleViewMode={() => void handleToggleViewMode()}
+                  onCopyShareLink={() => void handleCopyShareLink()}
+                  onOpenShareDialog={() => setShareDialogOpen(true)}
+                  onEnableShare={() => void handleEnableShare()}
+                  onToggleMobileSidebar={() => setMobileSidebarOpen(true)}
+                  isDisablingShare={isDisablingShare}
+                  activeShareUrl={activeShareUrl}
+                />
 
                 <div className="min-h-0 flex-1">
                   <SimpleEditor
@@ -863,7 +560,19 @@ export function NotesWorkspace({
             <SheetTitle>笔记列表</SheetTitle>
             <SheetDescription>在移动端查看和切换笔记。</SheetDescription>
           </SheetHeader>
-          {notesSidebar}
+          <NotesSidebar
+            documents={documents}
+            activeId={activeId}
+            referenceNow={referenceNow}
+            busyAction={busyAction}
+            onCreateDocument={() => void handleCreateDocument()}
+            onSelectDocument={(doc) => {
+              handleSelectDocument(doc);
+              setMobileSidebarOpen(false);
+            }}
+            onTogglePinned={(doc) => void handleTogglePinned(doc)}
+            onDeleteDocument={setPendingDeleteId}
+          />
         </SheetContent>
       </Sheet>
 
@@ -954,57 +663,4 @@ export function NotesWorkspace({
       </AlertDialog>
     </div>
   );
-}
-
-function formatSavedTime(value: string) {
-  return formatInAppTimeZone(value, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
-function formatSavedLabel(value: string) {
-  return `已保存 ${formatSavedTime(value)}`;
-}
-
-function sortDocuments(left: NoteDocument, right: NoteDocument) {
-  if (left.isPinned !== right.isPinned) {
-    return left.isPinned ? -1 : 1;
-  }
-
-  return (
-    new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-  );
-}
-
-function groupDocuments(documents: NoteDocument[], now: number) {
-  const todayIndex = getTimeZoneDayIndex(now);
-  const groups: { label: string; items: NoteDocument[] }[] = [
-    { label: "已置顶", items: [] },
-    { label: "今天", items: [] },
-    { label: "昨天", items: [] },
-    { label: "最近 7 天", items: [] },
-    { label: "更早", items: [] },
-  ];
-
-  for (const doc of documents) {
-    if (doc.isPinned) {
-      groups[0].items.push(doc);
-      continue;
-    }
-    const dayDiff = todayIndex - getTimeZoneDayIndex(doc.updatedAt);
-
-    if (dayDiff <= 0) {
-      groups[1].items.push(doc);
-    } else if (dayDiff === 1) {
-      groups[2].items.push(doc);
-    } else if (dayDiff < 7) {
-      groups[3].items.push(doc);
-    } else {
-      groups[4].items.push(doc);
-    }
-  }
-
-  return groups.filter((g) => g.items.length > 0);
 }

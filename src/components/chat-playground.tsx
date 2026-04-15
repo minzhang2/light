@@ -1,19 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ArrowUpIcon,
-  CheckIcon,
-  ClipboardIcon,
-  FileIcon,
-  ImageIcon,
   MessageCircleIcon,
   PaperclipIcon,
   RefreshCwIcon,
   SquareIcon,
   Trash2Icon,
-  XIcon,
 } from "lucide-react";
 
 import {
@@ -34,331 +28,34 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
   ChatKeyOption,
-  ChatMessageInput,
   ChatSessionDetail,
 } from "@/features/chat/types";
 import { cn } from "@/lib/utils";
-
-type ChatMessage = ChatMessageInput & {
-  id: string;
-  keyName?: string;
-  model?: string;
-  failed?: boolean;
-};
-
-const STORAGE_KEY_ID = "chat:selected-key-id";
-const STORAGE_MODEL = "chat:selected-model";
-
-function MessageActionButton({
-  onClick,
-  icon,
-  label,
-  disabled = false,
-  destructive = false,
-}: {
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  disabled?: boolean;
-  destructive?: boolean;
-}) {
-  const button = (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      disabled={disabled}
-      className={cn(
-        "inline-flex items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-50",
-        destructive
-          ? "text-destructive hover:text-destructive/80"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {icon}
-    </button>
-  );
-
-  return (
-    <Tooltip>
-      <TooltipTrigger render={button} />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function MessageActions({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align: "start" | "end";
-}) {
-  return <div className={cn("flex gap-1.5", align === "end" ? "justify-end" : "justify-start")}>{children}</div>;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  }
-
-  return (
-    <MessageActionButton
-      onClick={handleCopy}
-      label={copied ? "已复制" : "复制"}
-      icon={copied ? <CheckIcon className="h-[14px] w-[14px]" /> : <ClipboardIcon className="h-[14px] w-[14px]" />}
-    />
-  );
-}
-
-function getMessagesForRequest(messages: ChatMessageInput[]) {
-  return messages.map((item) => ({
-    role: item.role,
-    content: item.content,
-  }));
-}
-
-function formatAttachmentNames(files: File[]) {
-  return files.map((file) => file.name).join("、");
-}
-
-function buildUserMessagePreview(content: string, files: File[]) {
-  const trimmed = content.trim();
-
-  if (files.length === 0) {
-    return trimmed;
-  }
-
-  const summary = files.map((file) => `- ${file.name}`).join("\n");
-
-  if (!trimmed) {
-    return `[本次临时附件]\n${summary}`;
-  }
-
-  return `${trimmed}\n\n[本次临时附件]\n${summary}`;
-}
-
-function parseMessageContent(content: string) {
-  const marker = "[本次临时附件]";
-  const markerIndex = content.indexOf(marker);
-
-  if (markerIndex === -1) {
-    return {
-      text: content,
-      attachments: [] as string[],
-    };
-  }
-
-  const text = content.slice(0, markerIndex).trim();
-  const attachmentLines = content
-    .slice(markerIndex + marker.length)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.replace(/^-\s*/, "").trim())
-    .map((line) => line.replace(/\s+\([^)\/]+\/[^)]+\)\s*$/i, "").trim())
-    .filter(Boolean);
-
-  return {
-    text,
-    attachments: attachmentLines,
-  };
-}
-
-function inferAttachmentKind(label: string) {
-  const normalized = label.toLowerCase();
-
-  if (
-    normalized.includes("(image/") ||
-    /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)(\s|$|\()/.test(normalized)
-  ) {
-    return "图片";
-  }
-
-  return "文件";
-}
-
-function MessageContent({
-  message,
-}: {
-  message: ChatMessage;
-}) {
-  const parsed = parseMessageContent(message.content);
-  const isUser = message.role === "user";
-  const attachmentClassName = isUser ? "text-primary-foreground/72" : "text-muted-foreground";
-
-  return (
-    <div>
-      {parsed.text ? (
-        <p className="break-words whitespace-pre-wrap">{parsed.text}</p>
-      ) : null}
-      {parsed.attachments.length > 0 ? (
-        <div className={cn("flex min-w-0 items-center gap-1.5 text-[11px]", attachmentClassName)}>
-          {parsed.attachments.length === 1 && inferAttachmentKind(parsed.attachments[0]) === "图片" ? (
-            <ImageIcon className="size-3 shrink-0" />
-          ) : parsed.attachments.length === 1 ? (
-            <FileIcon className="size-3 shrink-0" />
-          ) : (
-            <PaperclipIcon className="size-3 shrink-0" />
-          )}
-          <span className="min-w-0 truncate" title={parsed.attachments.join("、")}>
-            {parsed.attachments.join("、")}
-          </span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function buildChatFormData(input: {
-  keyId: string;
-  model: string;
-  messages: ChatMessageInput[];
-  sessionId: string | null;
-  files: File[];
-}) {
-  const formData = new FormData();
-  formData.set("keyId", input.keyId);
-  formData.set("model", input.model);
-  formData.set("messages", JSON.stringify(getMessagesForRequest(input.messages)));
-
-  if (input.sessionId) {
-    formData.set("sessionId", input.sessionId);
-  }
-
-  for (const file of input.files) {
-    formData.append("attachments", file, file.name);
-  }
-
-  return formData;
-}
-
-function FileChip({
-  file,
-  onRemove,
-  disabled,
-}: {
-  file: File;
-  onRemove: () => void;
-  disabled: boolean;
-}) {
-  const isImage = file.type.startsWith("image/");
-
-  return (
-    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-2.5 py-1 text-xs text-muted-foreground">
-      <PaperclipIcon className="size-3 shrink-0" />
-      <span className="truncate">{file.name}</span>
-      <span className="shrink-0 text-[10px] uppercase text-foreground/45">
-        {isImage ? "图片" : "文件"}
-      </span>
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="ghost"
-        className="size-5 rounded-full"
-        onClick={onRemove}
-        disabled={disabled}
-        aria-label={`移除 ${file.name}`}
-      >
-        <XIcon className="size-3" />
-      </Button>
-    </span>
-  );
-}
-
-function KeySupportBadges({
-  keyOption,
-  className,
-}: {
-  keyOption: ChatKeyOption;
-  className?: string;
-}) {
-  const inferredClaude = keyOption.models.some((model) => /(claude|sonnet|opus|haiku)/i.test(model));
-  const inferredCodex = keyOption.models.some((model) => !/(claude|sonnet|opus|haiku)/i.test(model));
-  const showClaude =
-    (typeof keyOption.supportsClaude === "boolean" ? keyOption.supportsClaude : false) ||
-    inferredClaude ||
-    keyOption.group === "claude";
-  const showCodex =
-    (typeof keyOption.supportsCodex === "boolean" ? keyOption.supportsCodex : false) ||
-    inferredCodex ||
-    keyOption.group === "codex";
-
-  return (
-    <span className={cn("inline-flex items-center gap-1", className)}>
-      {showClaude ? (
-        <span className="rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
-          Claude
-        </span>
-      ) : null}
-      {showCodex ? (
-        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-          Codex
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function getRetryableUserMessageIds(messages: ChatMessage[]) {
-  const ids: string[] = [];
-
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message.role !== "user") {
-      continue;
-    }
-
-    const nextMessage = messages[index + 1];
-    if (!nextMessage || nextMessage.role !== "assistant") {
-      ids.push(message.id);
-    }
-  }
-
-  return ids;
-}
-
-function makeMessageId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function findKey(keys: ChatKeyOption[], keyId: string | null) {
-  if (!keyId) {
-    return null;
-  }
-
-  return keys.find((item) => item.id === keyId) ?? null;
-}
-
-function isAbortError(error: unknown) {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function getInitialKeyId(keys: ChatKeyOption[], initialSession?: ChatSessionDetail | null) {
-  return findKey(keys, initialSession?.keyId ?? null)?.id ?? keys[0]?.id ?? null;
-}
-
-function getInitialModel(
-  keys: ChatKeyOption[],
-  keyId: string | null,
-  initialSession?: ChatSessionDetail | null,
-) {
-  const key = findKey(keys, keyId);
-
-  if (initialSession?.model && key?.models.includes(initialSession.model)) {
-    return initialSession.model;
-  }
-
-  return key?.defaultModel ?? keys[0]?.defaultModel ?? "";
-}
+import {
+  MessageActionButton,
+  MessageActions,
+  CopyButton,
+  MessageContent,
+  FileChip,
+  KeySupportBadges,
+} from "./chat-playground/message-components";
+import { EmptyKeysState } from "./chat-playground/empty-state";
+import type { ChatMessage } from "./chat-playground/types";
+import { STORAGE_KEY_ID, STORAGE_MODEL } from "./chat-playground/types";
+import {
+  getMessagesForRequest,
+  formatAttachmentNames,
+  buildUserMessagePreview,
+  getRetryableUserMessageIds,
+  makeMessageId,
+  findKey,
+  isAbortError,
+  getInitialKeyId,
+  getInitialModel,
+} from "./chat-playground/utils";
+import * as api from "./chat-playground/api";
 
 export function ChatPlayground({
   keys,
@@ -541,30 +238,18 @@ export function ChatPlayground({
 
   async function ensureSession(
     firstMessage: string,
-    signal?: AbortSignal,
   ): Promise<string | null> {
     if (sessionId) {
       return sessionId;
     }
 
     const title = firstMessage.slice(0, 60).trim() || "新会话";
-    const res = await fetch("/api/chat/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        keyId: selectedKeyId,
-        model: selectedModel,
-      }),
-      signal,
+    const newId = await api.createSession({
+      title,
+      keyId: selectedKeyId,
+      model: selectedModel,
     });
 
-    if (!res.ok) {
-      return null;
-    }
-
-    const newSession = (await res.json().catch(() => null)) as { id?: string } | null;
-    const newId = newSession?.id ?? null;
     if (newId) {
       pendingCreatedSessionIdRef.current = newId;
       setSessionId(newId);
@@ -626,37 +311,14 @@ export function ChatPlayground({
         return;
       }
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        body: buildChatFormData({
-          keyId: selectedKey.id,
-          model: selectedModel,
-          messages: requestMessages,
-          sessionId: activeSessionId,
-          files: filesToSend,
-        }),
+      const result = await api.sendChatMessage({
+        keyId: selectedKey.id,
+        model: selectedModel,
+        messages: requestMessages,
+        sessionId: activeSessionId,
+        files: filesToSend,
         signal: controller.signal,
       });
-
-      if (controller.signal.aborted || abortControllerRef.current !== controller) {
-        return;
-      }
-
-      const payload = (await response.json().catch(() => null)) as
-        | {
-            message?: string;
-            result?: {
-              content: string;
-              keyName: string;
-              model: string;
-            };
-          }
-        | null;
-
-      if (!response.ok || !payload?.result) {
-        throw new Error(payload?.message ?? "聊天请求失败。");
-      }
-      const result = payload.result;
 
       if (controller.signal.aborted || abortControllerRef.current !== controller) {
         return;
@@ -732,30 +394,13 @@ export function ChatPlayground({
         return;
       }
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          keyId: selectedKey.id,
-          model: selectedModel,
-          messages: getMessagesForRequest(nextMessages),
-          sessionId: activeSessionId,
-        }),
+      const result = await api.sendChatMessage({
+        keyId: selectedKey.id,
+        model: selectedModel,
+        messages: getMessagesForRequest(nextMessages),
+        sessionId: activeSessionId,
         signal: controller.signal,
       });
-
-      if (controller.signal.aborted || abortControllerRef.current !== controller) {
-        return;
-      }
-
-      const payload = (await response.json().catch(() => null)) as
-        | { message?: string; result?: { content: string; keyName: string; model: string } }
-        | null;
-
-      if (!response.ok || !payload?.result) {
-        throw new Error(payload?.message ?? "聊天请求失败。");
-      }
-      const result = payload.result;
 
       if (controller.signal.aborted || abortControllerRef.current !== controller) {
         return;
@@ -796,16 +441,10 @@ export function ChatPlayground({
       return;
     }
 
-    const response = await fetch(`/api/chat/sessions/${sessionIdRef.current}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: getMessagesForRequest(nextMessages) }),
-    });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-      throw new Error(payload?.message ?? "更新消息失败。");
-    }
+    await api.updateSessionMessages(
+      sessionIdRef.current,
+      getMessagesForRequest(nextMessages),
+    );
   }
 
   async function handleDeleteMessage(messageId: string) {
@@ -874,28 +513,7 @@ export function ChatPlayground({
   }
 
   if (keys.length === 0) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">
-        <section className="rounded-[2rem] border border-dashed border-border/70 bg-card p-8 text-center shadow-sm">
-          <div className="mx-auto flex max-w-xl flex-col items-center gap-3">
-            <div className="rounded-2xl bg-muted p-3 text-muted-foreground">
-              <MessageCircleIcon className="h-6 w-6" />
-            </div>
-            <h2 className="text-xl font-semibold">还没有可用的聊天 key</h2>
-            <p className="text-sm leading-6 text-muted-foreground">
-              这个聊天页只展示已测试通过、并且识别出可用模型的 key。先去 Key 管理页导入并测试 key，再回来聊天。
-            </p>
-            <Button
-              nativeButton={false}
-              render={<Link href="/dashboard/keys" />}
-              className="mt-2"
-            >
-              前往 Key 管理
-            </Button>
-          </div>
-        </section>
-      </div>
-    );
+    return <EmptyKeysState />;
   }
 
   return (

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { testManagedKey } from "@/features/managed-keys/service";
+import { testManagedKey, getGlobalConfig } from "@/features/managed-keys/service";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 
 export async function POST(
@@ -16,7 +16,12 @@ export async function POST(
   const { id } = await context.params;
 
   try {
-    const result = await testManagedKey(id);
+    const config = await getGlobalConfig();
+    const result = await testManagedKey(
+      id,
+      config.preferredModels,
+      config.exhaustiveModelTesting,
+    );
 
     return NextResponse.json({
       message: result.result.message,

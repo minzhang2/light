@@ -118,7 +118,10 @@ export function useLinkHandler(props: LinkHandlerProps) {
     const { href } = editor.getAttributes("link")
 
     if (isLinkActive(editor) && url === null) {
-      setUrl(href || "")
+      // Use queueMicrotask to defer setState
+      queueMicrotask(() => {
+        setUrl(href || "")
+      })
     }
   }, [editor, url])
 

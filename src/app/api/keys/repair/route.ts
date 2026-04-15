@@ -38,7 +38,7 @@ async function getAvailableAIKey(keyId?: string) {
   return availableKey;
 }
 
-async function useAIToRepairKey(
+async function repairKeyWithAI(
   corruptedKey: string,
   chineseText: string,
   targetLength: number,
@@ -48,6 +48,7 @@ async function useAIToRepairKey(
   model?: string,
   customPrompt?: string,
   previousCandidates?: string[],
+  maxCandidates?: number,
 ): Promise<{
   success: boolean;
   repairedKey?: string;
@@ -108,19 +109,10 @@ key 的正确总长度应该是: ${targetLength} 个字符
 1. 输出的字符数必须正好是 ${missingLength} 个
 2. 只输出推断的字符组合，每行一个
 3. 不要有任何解释、说明或其他文字
-4. 给出 100 个候选，按可能性从高到低排序
+4. 给出 ${maxCandidates || 50} 个候选，按可能性从高到低排序
 5. 不要有编号、符号或格式标记`;
 
   const prompt = finalPrompt;
-
-  console.log("=== AI 修复 Key - 最终提示符 ===");
-  console.log("损坏的 key:", corruptedKey);
-  console.log("异常字符:", chineseText);
-  console.log("需要替换的字符数:", missingLength);
-  console.log("用户自定义提示符:", customPrompt || "(未提供，使用默认)");
-  console.log("最终发送给 AI 的完整提示符:");
-  console.log(prompt);
-  console.log("================================");
 
   try {
     const aiKey = await getAvailableAIKey(keyId);
@@ -173,20 +165,10 @@ key 的正确总长度应该是: ${targetLength} 个字符
 
     const aiText = aiResult.content[0]?.text || "";
 
-    console.log("=== AI 返回结果 ===");
-    console.log("AI 原始输出:");
-    console.log(aiText);
-    console.log("==================");
-
     const candidates = aiText
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length === missingLength && /^[a-zA-Z0-9]+$/.test(line));
-
-    console.log("=== 解析后的候选 ===");
-    console.log("有效候选数量:", candidates.length);
-    console.log("候选列表:", candidates);
-    console.log("=====================");
 
     if (candidates.length === 0) {
       return {
@@ -220,8 +202,6 @@ key 的正确总长度应该是: ${targetLength} 个字符
 
       const isValid = await testKeyValidity(repairedKey, baseUrl, protocol);
 
-      console.log(`测试候选 ${attempt}/${candidates.length}: "${candidate}" -> ${isValid ? "✓ 通过" : "✗ 失败"}`);
-
       if (isValid) {
         validCandidates.push(candidate);
         testResults.push({ candidate, status: "success" });
@@ -249,7 +229,6 @@ key 的正确总长度应该是: ${targetLength} 个字符
       error: `测试了 ${attempt} 个 AI 生成的候选，但均未通过验证。`
     };
   } catch (error) {
-    console.error("AI repair error:", error);
     return {
       success: false,
       attempts: 0,
@@ -275,8 +254,6 @@ async function testKeyValidity(
         },
         signal: AbortSignal.timeout(10000),
       });
-      const body = await response.text().catch(() => "");
-      console.log(`测试 key 可用性: key=${key.slice(0, 8)}...${key.slice(-4)}, status=${response.status}, ok=${response.ok}, body=${body.slice(0, 200)}`);
       return response.ok;
     } else {
       const response = await fetch(new URL("/models", baseUrl), {
@@ -286,12 +263,9 @@ async function testKeyValidity(
         },
         signal: AbortSignal.timeout(10000),
       });
-      const body = await response.text().catch(() => "");
-      console.log(`测试 key 可用性: key=${key.slice(0, 8)}...${key.slice(-4)}, status=${response.status}, ok=${response.ok}, body=${body.slice(0, 200)}`);
       return response.ok;
     }
-  } catch (err) {
-    console.log(`测试 key 可用性: 请求异常`, err);
+  } catch {
     return false;
   }
 }
@@ -312,9 +286,10 @@ export async function POST(request: Request) {
       model?: string;
       customPrompt?: string;
       previousCandidates?: string[];
+      maxCandidates?: number;
     };
 
-    const { corruptedKey, baseUrl = "https://new.timefiles.online", protocol = "anthropic", keyId, model, customPrompt, previousCandidates } = body;
+    const { corruptedKey, baseUrl = "https://new.timefiles.online", protocol = "anthropic", keyId, model, customPrompt, previousCandidates, maxCandidates = 50 } = body;
 
     if (!corruptedKey || corruptedKey.length < 10) {
       return NextResponse.json(
@@ -335,7 +310,7 @@ export async function POST(request: Request) {
     const chineseText = chinesePositions.map((p) => p.char).join("");
     const targetLength = 51;
 
-    const result = await useAIToRepairKey(
+    const result = await repairKeyWithAI(
       corruptedKey,
       chineseText,
       targetLength,
@@ -345,6 +320,7 @@ export async function POST(request: Request) {
       model,
       customPrompt,
       previousCandidates,
+      maxCandidates,
     );
 
     if (result.success && result.repairedKey) {

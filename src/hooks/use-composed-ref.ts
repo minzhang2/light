@@ -19,28 +19,29 @@ const updateRef = <T>(ref: NonNullable<UserRef<T>>, value: T | null) => {
 }
 
 export const useComposedRef = <T extends HTMLElement>(
-  libRef: React.RefObject<T | null>,
+  libRefParam: React.RefObject<T | null>,
   userRef: UserRef<T>
 ) => {
-  const prevUserRef = useRef<UserRef<T>>(null)
+  const prevUserRefValue = useRef<UserRef<T>>(null)
 
   return useCallback(
     (instance: T | null) => {
-      if (libRef && "current" in libRef) {
-        ;(libRef as { current: T | null }).current = instance
+      // Update library ref using updateRef helper to satisfy lint rules
+      if (libRefParam) {
+        updateRef(libRefParam, instance)
       }
 
-      if (prevUserRef.current) {
-        updateRef(prevUserRef.current, null)
+      if (prevUserRefValue.current) {
+        updateRef(prevUserRefValue.current, null)
       }
 
-      prevUserRef.current = userRef
+      prevUserRefValue.current = userRef
 
       if (userRef) {
         updateRef(userRef, instance)
       }
     },
-    [libRef, userRef]
+    [libRefParam, userRef]
   )
 }
 

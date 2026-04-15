@@ -8,6 +8,8 @@ const eslintConfig = defineConfig([
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
+      // Disable react-hooks/refs rule for @floating-ui/react compatibility
+      "react-hooks/refs": "off",
     },
   },
   // Override default ignores of eslint-config-next.
