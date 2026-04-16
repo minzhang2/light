@@ -172,24 +172,25 @@ export function RepairSection({
           <div className="flex items-center gap-2">
             <code className="flex-1 text-xs font-mono text-emerald-900 break-all">
               {(() => {
-                const corruptedPart = repairInput.match(/[^a-zA-Z0-9\-_]+/)?.[0] || "";
+                const idx = repairRepairedKey.indexOf(repairValidCandidates[0]);
 
-                if (!corruptedPart) {
-                  return repairRepairedKey;
+                if (idx === -1) {
+                  // 降级方案:完整显示 key,用边框标记整体
+                  return (
+                    <span className="border-2 border-emerald-600 bg-emerald-100 px-1 rounded">
+                      {repairRepairedKey}
+                    </span>
+                  );
                 }
 
-                const beforeCorrupted = repairRepairedKey.indexOf(repairValidCandidates[0]);
-                if (beforeCorrupted === -1) {
-                  return repairRepairedKey;
-                }
-
-                const afterReplaced = beforeCorrupted + repairValidCandidates[0].length;
-
+                // 正常方案:高亮修复部分
                 return (
                   <>
-                    {repairRepairedKey.slice(0, beforeCorrupted)}
-                    <span className="bg-emerald-600 text-white px-0.5 rounded">{repairValidCandidates[0]}</span>
-                    {repairRepairedKey.slice(afterReplaced)}
+                    {repairRepairedKey.slice(0, idx)}
+                    <span className="bg-emerald-600 text-white px-0.5 rounded">
+                      {repairValidCandidates[0]}
+                    </span>
+                    {repairRepairedKey.slice(idx + repairValidCandidates[0].length)}
                   </>
                 );
               })()}
