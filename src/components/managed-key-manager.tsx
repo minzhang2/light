@@ -485,7 +485,7 @@ export function ManagedKeyManager({
                 : `${GROUP_LABELS[item]} (${keys.filter((k) => matchesKeyFilter(k, item)).length})`}
             </Button>
           ))}
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"

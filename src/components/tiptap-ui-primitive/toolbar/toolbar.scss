@@ -52,6 +52,7 @@
     @media (max-width: 480px) {
       position: absolute;
       top: auto;
+      bottom: 0;
       height: calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom));
       border-top: 1px solid var(--tt-toolbar-border-color);
       border-bottom: none;

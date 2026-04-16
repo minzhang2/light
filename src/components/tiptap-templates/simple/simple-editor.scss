@@ -108,6 +108,6 @@ body,
 @media screen and (max-width: 480px) {
   .simple-editor-content .tiptap.ProseMirror.simple-editor,
   .simple-editor-fallback {
-    padding: 1rem 1.5rem 30vh;
+    padding: 1rem 1.5rem calc(var(--tt-toolbar-height) + var(--tt-safe-area-bottom) + 1rem);
   }
 }

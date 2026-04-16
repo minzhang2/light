@@ -285,12 +285,15 @@ export function SimpleEditor({
     "main"
   )
   const [toolbarHeight, setToolbarHeight] = useState(0)
+  const [isReady, setIsReady] = useState(false)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const toolbarView = isMobile ? mobileView : "main"
   const mobileToolbarReady = !isMobile || height > 0
 
-  const editor = useEditor({
+  const editor = useEditor(
+    {
     immediatelyRender: false,
+    shouldRerenderOnTransaction: false,
     editorProps: {
       attributes: {
         autocomplete: "off",
@@ -337,6 +340,15 @@ export function SimpleEditor({
     editor,
     overlayHeight: toolbarHeight,
   })
+
+  useEffect(() => {
+    if (editor) {
+      const timer = setTimeout(() => {
+        setIsReady(true)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [editor])
 
   useEffect(() => {
     const toolbar = toolbarRef.current
@@ -405,17 +417,20 @@ export function SimpleEditor({
           <Toolbar
             ref={toolbarRef}
             style={{
-              ...(isMobile && mobileToolbarReady
+              ...(isMobile && mobileToolbarReady && editor && isReady
                 ? {
                     bottom: `calc(100% - ${height - rect.y}px)`,
                   }
+                : {}),
+              ...(isMobile && !(editor && isReady)
+                ? { zIndex: 100 }
                 : {}),
               ...(isMobile && !mobileToolbarReady
                 ? { visibility: "hidden" as const }
                 : {}),
             }}
           >
-            {editor ? (
+            {editor && isReady ? (
               toolbarView === "main" ? (
                 <MainToolbarContent
                   onHighlighterClick={() => setMobileView("highlighter")}
@@ -434,7 +449,7 @@ export function SimpleEditor({
           </Toolbar>
         ) : null}
 
-        {editor ? (
+        {editor && isReady ? (
           <EditorContent
             editor={editor}
             role="presentation"
