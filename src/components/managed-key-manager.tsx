@@ -381,6 +381,9 @@ export function ManagedKeyManager({
           message: payload.message || `修复成功！`,
         });
         repairForm.setRepairInput("");
+        repairForm.setRepairCustomPrompt("");
+        localStorage.removeItem("repair_key");
+        localStorage.removeItem("repair_customPrompt");
         setRepairHistory([]);
       } else {
         toast({
