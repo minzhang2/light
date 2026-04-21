@@ -4,6 +4,13 @@ export type ManagedKeyProtocol = "anthropic" | "openai";
 
 export type ManagedKeyLaunchCommand = "claude" | "codex" | null;
 
+export type ManagedKeyAttemptHealthStatus =
+  | "operational"
+  | "degraded"
+  | "validation_failed"
+  | "request_failed"
+  | "error";
+
 export type ParsedManagedKeyInput = {
   name: string;
   aliases: string[];
@@ -45,14 +52,17 @@ export type ManagedKeyTestResult = {
   message: string;
   statusCode: number | null;
   testedAt: string;
+  discoveryOk: boolean;
   discoveredModel: string | null;
   discoveredModels: string[];
+  validatedModels: string[];
   attemptedModels: Array<{
     model: string;
     ok: boolean;
     statusCode: number | null;
     message: string;
-    source: "preferred" | "fallback";
+    source: "configured" | "preferred" | "fallback";
+    healthStatus: ManagedKeyAttemptHealthStatus;
     latency?: number;
   }>;
   averageLatency?: number;

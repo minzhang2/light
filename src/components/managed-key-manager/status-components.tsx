@@ -24,12 +24,18 @@ export function TestMessage({ message, status }: TestMessageProps) {
   const lines = normalizedMessage.split("\n");
 
   function renderHighlightedLine(line: string, lineIndex: number) {
-    const parts = line.split(/((?:^|[，,]\s*)[^，,\n]*（失败\/?\d*）)/g).filter(Boolean);
+    const parts = line
+      .split(
+        /((?:^|[，,]\s*)[^，,\n]*（(?:失败\/?\d*|验证失败|错误)）)/g,
+      )
+      .filter(Boolean);
 
     return (
       <span key={`${lineIndex}-${line}`} className="block">
         {parts.map((part, partIndex) => {
-          const failureMatch = part.match(/^([，,]?\s*)([^，,\n]*（失败\/?\d*）)(.*)$/);
+          const failureMatch = part.match(
+            /^([，,]?\s*)([^，,\n]*（(?:失败\/?\d*|验证失败|错误)）)(.*)$/,
+          );
 
           if (!failureMatch) {
             return <span key={`${lineIndex}-${partIndex}`}>{part}</span>;

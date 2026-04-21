@@ -103,6 +103,15 @@ export function stringifyExtraEnv(value: Record<string, string>) {
   return JSON.stringify(value);
 }
 
+export function buildManagedKeyTestCacheResetData() {
+  return {
+    availableModels: null,
+    lastTestStatus: null,
+    lastTestMessage: null,
+    lastTestAt: null,
+  };
+}
+
 export function mergeAvailableModels(
   currentModels: string[],
   discoveredModels: string[],

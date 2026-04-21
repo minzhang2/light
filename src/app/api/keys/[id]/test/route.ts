@@ -21,6 +21,7 @@ export async function POST(
       id,
       config.preferredModels,
       config.exhaustiveModelTesting,
+      { force: true },
     );
 
     return NextResponse.json({

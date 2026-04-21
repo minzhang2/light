@@ -1,9 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import type { ManagedKeyListItem } from "@/features/managed-keys/types";
+import { getSupportedProviderMap } from "@/features/managed-keys/provider-support";
 import {
   extractAnthropicText,
   extractOpenAiText,
 } from "@/lib/provider-response-parser";
+import {
+  buildOpenAiRequestBody,
+  resolveOpenAiRequestTargets,
+  type OpenAiChatMessage,
+} from "@/lib/openai-compatible";
 import type {
   ChatAttachmentInput,
   ChatCompletionResult,
@@ -118,7 +124,7 @@ function buildAnthropicMessages(
 function buildOpenAiMessages(
   messages: ChatMessageInput[],
   attachments: ChatAttachmentInput[],
-) {
+): OpenAiChatMessage[] {
   if (attachments.length === 0) {
     return messages;
   }
@@ -347,46 +353,8 @@ function buildProviderRequestErrorMessage(
   return appendProviderRawText(baseMessage, response);
 }
 
-function normalizeProviderLabels(message: string) {
-  const normalized = message
-    .replaceAll("Anthropic", "Claude")
-    .replaceAll("OpenAI", "Codex")
-    .replaceAll("Claude 协议可用", "Claude 可用")
-    .replaceAll("Codex 协议可用", "Codex 可用");
-
-  return normalized
-    .replace(/Claude\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
-      isClaudeModel(model)
-        ? `Claude 可用（测试模型：${model}）`
-        : `Codex 可用（测试模型：${model}）`,
-    )
-    .replace(/Codex\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
-      isClaudeModel(model)
-        ? `Claude 可用（测试模型：${model}）`
-        : `Codex 可用（测试模型：${model}）`,
-    );
-}
-
 function getSupportedTags(message: string | null) {
-  if (!message) {
-    return {
-      anthropic: false,
-      openai: false,
-    };
-  }
-
-  const normalizedMessage = normalizeProviderLabels(message);
-  const hasClaude =
-    /Claude\s*可用(?:（测试模型：|，测试模型：)/.test(normalizedMessage) ||
-    /Claude\s*模型测试：(?!(?:未验证|无可测模型))/.test(normalizedMessage);
-  const hasCodex =
-    /Codex\s*可用(?:（测试模型：|，测试模型：)/.test(normalizedMessage) ||
-    /Codex\s*模型测试：(?!(?:未验证|无可测模型))/.test(normalizedMessage);
-
-  return {
-    anthropic: hasClaude,
-    openai: hasCodex,
-  };
+  return getSupportedProviderMap(message);
 }
 
 function isClaudeModel(model: string) {
@@ -554,43 +522,63 @@ export async function createChatCompletion(input: {
   }
 
   const requestMessages = buildOpenAiMessages(messages, attachments);
+  const requestTargets = resolveOpenAiRequestTargets(key.baseUrl, input.model);
+  let lastErrorMessage = "聊天请求失败，请稍后再试。";
 
-  const response = await fetch(joinBaseUrl(key.baseUrl, "/chat/completions"), {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${key.secret}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model,
-      messages: requestMessages,
-    }),
-    signal: requestSignal,
-  });
+  for (const target of requestTargets) {
+    try {
+      const response = await fetch(target.url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${key.secret}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(
+          buildOpenAiRequestBody({
+            target,
+            model: input.model,
+            messages: requestMessages,
+          }),
+        ),
+        signal: requestSignal,
+      });
 
-  const providerResponse = await parseProviderResponse(response);
+      const providerResponse = await parseProviderResponse(response);
+      const isHtmlResponse = providerResponse.contentType?.includes("text/html");
 
-  if (!response.ok) {
-    throw new Error(
-      buildProviderRequestErrorMessage(
-        providerResponse,
-        response.status,
-        `聊天请求失败（HTTP ${response.status}）`,
-      ),
-    );
+      if (!response.ok) {
+        lastErrorMessage = buildProviderRequestErrorMessage(
+          providerResponse,
+          response.status,
+          `聊天请求失败（HTTP ${response.status}）`,
+        );
+        continue;
+      }
+
+      const content = isHtmlResponse
+        ? ""
+        : extractProviderContent(providerResponse, "openai");
+
+      if (!content) {
+        lastErrorMessage = buildEmptyProviderResponseMessage(
+          providerResponse,
+          "openai",
+        );
+        continue;
+      }
+
+      return {
+        content,
+        model: input.model,
+        keyName: key.name,
+      };
+    } catch (error) {
+      lastErrorMessage =
+        error instanceof Error ? error.message : "聊天请求失败，请稍后再试。";
+    }
   }
 
-  const content = extractProviderContent(providerResponse, "openai");
-
-  if (!content) {
-    throw new Error(buildEmptyProviderResponseMessage(providerResponse, "openai"));
-  }
-
-  return {
-    content,
-    model: input.model,
-    keyName: key.name,
-  };
+  throw new Error(lastErrorMessage);
 }
 
 export function describeChatAttachmentsForStorage(attachments: ChatAttachmentInput[]) {

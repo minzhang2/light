@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSessionOrNull } from "@/lib/auth/require-session";
 import { listManagedKeys } from "@/features/managed-keys/service";
+import {
+  generateManagedKeyChallenge,
+  validateManagedKeyChallengeResponse,
+} from "@/features/managed-keys/service/challenge";
+import {
+  extractProviderContent,
+  parseProviderResponse,
+} from "@/features/managed-keys/service/discovery";
 
 function extractChinesePositions(key: string): Array<{ index: number; char: string }> {
   const positions: Array<{ index: number; char: string }> = [];
@@ -282,6 +290,8 @@ async function testKeyValidity(
   signal?: AbortSignal,
 ): Promise<boolean> {
   try {
+    const requestSignal = signal || AbortSignal.timeout(10000);
+
     if (protocol === "anthropic") {
       const response = await fetch(new URL("/v1/models", baseUrl), {
         method: "GET",
@@ -290,20 +300,106 @@ async function testKeyValidity(
           authorization: `Bearer ${key}`,
           "x-api-key": key,
         },
-        signal: signal || AbortSignal.timeout(10000),
+        signal: requestSignal,
       });
-      return response.ok;
-    } else {
-      const response = await fetch(new URL("/models", baseUrl), {
-        method: "GET",
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const json = (await response.json().catch(() => null)) as
+        | { data?: Array<{ id?: string }> }
+        | null;
+      const model =
+        json?.data
+          ?.map((item) => item.id)
+          .find((value): value is string => Boolean(value)) ?? null;
+
+      if (!model) {
+        return false;
+      }
+
+      const challenge = generateManagedKeyChallenge();
+      const aiResponse = await fetch(new URL("/v1/messages", baseUrl), {
+        method: "POST",
         headers: {
+          "anthropic-version": "2023-06-01",
           authorization: `Bearer ${key}`,
+          "content-type": "application/json",
+          "x-api-key": key,
         },
-        signal: signal || AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          model,
+          max_tokens: 32,
+          messages: [{ role: "user", content: challenge.prompt }],
+        }),
+        signal: requestSignal,
       });
-      return response.ok;
+
+      if (!aiResponse.ok) {
+        return false;
+      }
+
+      const providerResponse = await parseProviderResponse(aiResponse);
+      const content = extractProviderContent(providerResponse, "anthropic");
+      return validateManagedKeyChallengeResponse(
+        content,
+        challenge.expectedAnswer,
+      ).valid;
     }
-  } catch {
+
+    const response = await fetch(new URL("/models", baseUrl), {
+      method: "GET",
+      headers: {
+        authorization: `Bearer ${key}`,
+      },
+      signal: requestSignal,
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const json = (await response.json().catch(() => null)) as
+      | { data?: Array<{ id?: string }> }
+      | null;
+    const model =
+      json?.data
+        ?.map((item) => item.id)
+        .find((value): value is string => Boolean(value)) ?? null;
+
+    if (!model) {
+      return false;
+    }
+
+    const challenge = generateManagedKeyChallenge();
+    const aiResponse = await fetch(new URL("/chat/completions", baseUrl), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${key}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 32,
+        messages: [{ role: "user", content: challenge.prompt }],
+      }),
+      signal: requestSignal,
+    });
+
+    if (!aiResponse.ok) {
+      return false;
+    }
+
+    const providerResponse = await parseProviderResponse(aiResponse);
+    const content = extractProviderContent(providerResponse, "openai");
+    return validateManagedKeyChallengeResponse(content, challenge.expectedAnswer)
+      .valid;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+
     return false;
   }
 }

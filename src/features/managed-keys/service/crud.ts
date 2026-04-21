@@ -14,6 +14,7 @@ import type {
 import {
   parseJsonRecord,
   parseJsonArray,
+  buildManagedKeyTestCacheResetData,
   buildCopyText,
   buildExportText,
   stringifyAliases,
@@ -74,6 +75,9 @@ export function mergeExistingWithParsed(
   aliases.delete(entry.name);
   aliases.delete("");
 
+  const shouldResetTestCache =
+    Boolean(existing) && existing?.fingerprint !== entry.fingerprint;
+
   return {
     name: entry.name,
     aliases: stringifyAliases([...aliases]),
@@ -88,6 +92,7 @@ export function mergeExistingWithParsed(
       ...entry.extraEnv,
     }),
     fingerprint: entry.fingerprint,
+    ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
     ...(typeof options?.isTestable === "boolean"
       ? { isTestable: options.isTestable }
       : {}),
@@ -190,6 +195,7 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
     model,
     launchCommand,
   ]);
+  const shouldResetTestCache = existing.fingerprint !== nextFingerprint;
 
   const conflicting = await prisma.managedKey.findFirst({
     where: {
@@ -230,6 +236,7 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
           isTestable,
           isPinned,
           fingerprint: nextFingerprint,
+          ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
         },
       });
     });
@@ -249,6 +256,7 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
         isTestable,
         isPinned,
         fingerprint: nextFingerprint,
+        ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
       },
     });
 
@@ -262,7 +270,12 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
   }
 }
 
-export async function testManagedKey(id: string, globalPreferredModels: string[], exhaustiveModelTesting: boolean) {
+export async function testManagedKey(
+  id: string,
+  globalPreferredModels: string[],
+  exhaustiveModelTesting: boolean,
+  options?: { force?: boolean },
+) {
   const key = await prisma.managedKey.findUnique({
     where: { id },
   });
@@ -281,6 +294,7 @@ export async function testManagedKey(id: string, globalPreferredModels: string[]
     toListItem,
     globalPreferredModels,
     exhaustiveModelTesting,
+    options,
   );
 
   await prisma.managedKey.update({
@@ -299,7 +313,7 @@ export async function testManagedKey(id: string, globalPreferredModels: string[]
       where: { id },
       data: {
         model: nextModel,
-        availableModels: JSON.stringify(result.discoveredModels),
+        availableModels: JSON.stringify(result.validatedModels),
       },
     });
   } catch (error) {
@@ -329,7 +343,7 @@ export async function testManagedKey(id: string, globalPreferredModels: string[]
   const nextItem = toListItem(updated);
   const nextAvailableModels = mergeAvailableModels(
     nextItem.availableModels,
-    result.discoveredModels,
+    result.validatedModels,
     result.discoveredModel,
   );
 

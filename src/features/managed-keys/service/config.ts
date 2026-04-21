@@ -1,7 +1,16 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { GlobalConfig } from "@/features/managed-keys/types";
-import { parseJsonArray, parseBooleanValue, normalizeModelConfig } from "./utils";
+import {
+  buildManagedKeyTestCacheResetData,
+  parseJsonArray,
+  parseBooleanValue,
+  normalizeModelConfig,
+} from "./utils";
+
+function areStringArraysEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
   const preferredRecord = await prisma.appConfig.findUnique({
@@ -22,15 +31,30 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
 }
 
 export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<GlobalConfig> {
+  const currentConfig = await getGlobalConfig();
+  const nextPreferredModels =
+    config.preferredModels !== undefined
+      ? normalizeModelConfig(config.preferredModels)
+      : currentConfig.preferredModels;
+  const nextExhaustiveModelTesting =
+    config.exhaustiveModelTesting !== undefined
+      ? Boolean(config.exhaustiveModelTesting)
+      : currentConfig.exhaustiveModelTesting;
+  const shouldInvalidateTestCache =
+    (config.preferredModels !== undefined &&
+      !areStringArraysEqual(currentConfig.preferredModels, nextPreferredModels)) ||
+    (config.exhaustiveModelTesting !== undefined &&
+      currentConfig.exhaustiveModelTesting !== nextExhaustiveModelTesting);
+
   if (config.preferredModels !== undefined) {
     await prisma.appConfig.upsert({
       where: { key: "preferredModels" },
       create: {
         key: "preferredModels",
-        value: JSON.stringify(normalizeModelConfig(config.preferredModels)),
+        value: JSON.stringify(nextPreferredModels),
       },
       update: {
-        value: JSON.stringify(normalizeModelConfig(config.preferredModels)),
+        value: JSON.stringify(nextPreferredModels),
       },
     });
   }
@@ -40,15 +64,24 @@ export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<Gl
       where: { key: "exhaustiveModelTesting" },
       create: {
         key: "exhaustiveModelTesting",
-        value: JSON.stringify(Boolean(config.exhaustiveModelTesting)),
+        value: JSON.stringify(nextExhaustiveModelTesting),
       },
       update: {
-        value: JSON.stringify(Boolean(config.exhaustiveModelTesting)),
+        value: JSON.stringify(nextExhaustiveModelTesting),
       },
     });
   }
 
-  return getGlobalConfig();
+  if (shouldInvalidateTestCache) {
+    await prisma.managedKey.updateMany({
+      data: buildManagedKeyTestCacheResetData(),
+    });
+  }
+
+  return {
+    preferredModels: nextPreferredModels,
+    exhaustiveModelTesting: nextExhaustiveModelTesting,
+  };
 }
 
 export function isUnknownUpdateArgumentError(error: unknown, argument: string) {

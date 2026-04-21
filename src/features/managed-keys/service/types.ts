@@ -11,5 +11,5 @@ export type ParsedProviderResponse = {
 
 export type TestCandidate = {
   model: string;
-  source: "preferred" | "fallback";
+  source: "configured" | "preferred" | "fallback";
 };

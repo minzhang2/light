@@ -1,5 +1,8 @@
 import { formatInAppTimeZone } from "@/lib/date-time";
+import { getSupportedProviders } from "@/features/managed-keys/provider-support";
 import type { ManagedKeyListItem } from "@/features/managed-keys/types";
+
+export { getSupportedProviders, normalizeProviderLabels } from "@/features/managed-keys/provider-support";
 
 export function inferLaunchCommand(
   key: Pick<ManagedKeyListItem, "group" | "protocol" | "launchCommand">,
@@ -90,92 +93,6 @@ export function formatDateTime(value: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-export function isClaudeFamilyModel(model: string) {
-  return /(claude|sonnet|opus|haiku|anthropic)/i.test(model);
-}
-
-export function normalizeProviderLabels(message: string) {
-  const normalized = message
-    .replaceAll("Anthropic", "Claude")
-    .replaceAll("OpenAI", "Codex")
-    .replaceAll("Anthropic 模型测试", "Claude 模型测试")
-    .replaceAll("OpenAI 模型测试", "Codex 模型测试")
-    .replaceAll("Claude 可用（未识别出可测试模型）", "Claude 未验证（模型列表可访问，但未识别出可测试模型）")
-    .replaceAll("Codex 可用（未识别出可测试模型）", "Codex 未验证（模型列表可访问，但未识别出可测试模型）");
-
-  return normalized
-    .replace(/Claude\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
-      isClaudeFamilyModel(model)
-        ? `Claude 可用（测试模型：${model}）`
-        : `Codex 可用（测试模型：${model}）`,
-    )
-    .replace(/Codex\s*可用（测试模型：([^）]+)）/g, (_all, model: string) =>
-      isClaudeFamilyModel(model)
-        ? `Claude 可用（测试模型：${model}）`
-        : `Codex 可用（测试模型：${model}）`,
-    );
-}
-
-function hasSuccessfulAttemptInSummary(summary: string) {
-  return summary
-    .split(/[，,]/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .some((part) => !/（失败(?:\/\d+)?）$/.test(part));
-}
-
-export function providerIsAvailable(message: string, label: "Claude" | "Codex") {
-  const normalizedMessage = normalizeProviderLabels(message);
-  const lines = normalizedMessage
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (
-    lines.some((line) =>
-      new RegExp(`^${label}\\s*(?:可用|已发现模型|未验证)`).test(line),
-    )
-  ) {
-    return true;
-  }
-
-  const testLine = lines.find((line) => line.startsWith(`${label} 模型测试：`));
-
-  if (!testLine) {
-    return false;
-  }
-
-  const summary = testLine.slice(`${label} 模型测试：`.length).trim();
-
-  if (!summary || summary === "无可用模型") {
-    return false;
-  }
-
-  if (summary.startsWith("未验证（接口可用")) {
-    return true;
-  }
-
-  return hasSuccessfulAttemptInSummary(summary);
-}
-
-export function getSupportedProviders(message: string | null) {
-  if (!message) {
-    return [];
-  }
-
-  const providers: Array<"anthropic" | "openai"> = [];
-
-  if (providerIsAvailable(message, "Claude")) {
-    providers.push("anthropic");
-  }
-
-  if (providerIsAvailable(message, "Codex")) {
-    providers.push("openai");
-  }
-
-  return providers;
 }
 
 export function matchesKeyFilter(key: ManagedKeyListItem, filter: "all" | "claude" | "codex") {

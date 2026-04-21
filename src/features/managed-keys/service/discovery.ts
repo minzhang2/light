@@ -120,33 +120,69 @@ export function buildModelsToTest(
     matchesModelGroup(model, key.group),
   );
   const scopedPreferredModels = getScopedPreferredModels(key, globalPreferredModels);
-  const preferredCandidates = scopedPreferredModels.map((model) => ({
-    model,
-    source: "preferred" as const,
-  }));
-  const preferredSeen = new Set(
-    scopedPreferredModels.map((model) => normalizeModelAlias(model)),
+  const discoveredAliases = new Set(
+    scopedDiscoveredModels.map((model) => normalizeModelAlias(model)),
   );
+  const candidates: TestCandidate[] = [];
+  const seen = new Set<string>();
+
+  const addCandidate = (
+    model: string | null | undefined,
+    source: TestCandidate["source"],
+  ) => {
+    const trimmed = model?.trim();
+
+    if (!trimmed) {
+      return;
+    }
+
+    const normalized = normalizeModelAlias(trimmed);
+
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    candidates.push({
+      model: trimmed,
+      source,
+    });
+  };
+
+  const configuredModel =
+    key.model && matchesModelGroup(key.model, key.group) ? key.model : null;
+  addCandidate(configuredModel, "configured");
+
+  const preferredCandidates =
+    scopedDiscoveredModels.length > 0
+      ? scopedPreferredModels.filter((model) =>
+          discoveredAliases.has(normalizeModelAlias(model)),
+        )
+      : scopedPreferredModels;
+
+  for (const model of preferredCandidates) {
+    addCandidate(model, "preferred");
+  }
+
   const fallbackModels = sortModelsByGroupPriority(
     scopedDiscoveredModels.filter(
-      (model) => !preferredSeen.has(normalizeModelAlias(model)),
+      (model) => !seen.has(normalizeModelAlias(model)),
     ),
     key.group,
   );
 
   if (exhaustiveModelTesting) {
     return [
-      ...preferredCandidates,
+      ...candidates,
       ...fallbackModels.map((model) => ({ model, source: "fallback" as const })),
     ];
   }
 
-  // If no preferred models to test, test at least the top fallback model
-  if (preferredCandidates.length === 0 && fallbackModels.length > 0) {
-    return [{ model: fallbackModels[0], source: "fallback" as const }];
+  if (candidates.length === 0 && fallbackModels.length > 0) {
+    addCandidate(fallbackModels[0], "fallback");
   }
 
-  return preferredCandidates;
+  return candidates;
 }
 
 export function extractErrorMessage(payload: unknown) {
@@ -325,8 +361,17 @@ export function buildAttemptSummary(attempts: ManagedKeyTestResult["attemptedMod
   return orderedAttempts
     .map((attempt: ManagedKeyTestResult["attemptedModels"][number]) => {
       if (attempt.ok) {
-        const latencyInfo = attempt.latency ? ` ${attempt.latency}ms` : "";
-        return `${attempt.model}${latencyInfo}`;
+        const statusLabel = attempt.healthStatus === "degraded" ? "延迟" : "可用";
+        const latencyInfo = attempt.latency ? `/${attempt.latency}ms` : "";
+        return `${attempt.model}（${statusLabel}${latencyInfo}）`;
+      }
+
+      if (attempt.healthStatus === "validation_failed") {
+        return `${attempt.model}（验证失败）`;
+      }
+
+      if (attempt.healthStatus === "error") {
+        return `${attempt.model}（错误）`;
       }
 
       return `${attempt.model}（失败${attempt.statusCode ? `/${attempt.statusCode}` : ""}）`;
@@ -353,8 +398,7 @@ export function summarizeTagAvailability(input: {
   const label = input.tag === "claude" ? "Claude" : "Codex";
   const tagGroup = input.tag === "claude" ? "claude" : "codex";
   const matchedModel = input.results
-    .filter((result) => result.ok && Boolean(result.discoveredModel))
-    .map((result) => result.discoveredModel as string)
+    .flatMap((result) => result.validatedModels)
     .find((model) =>
       input.tag === "claude" ? isClaudeFamilyModel(model) : !isClaudeFamilyModel(model),
     );
@@ -367,7 +411,7 @@ export function summarizeTagAvailability(input: {
     };
   }
 
-  const hasAccessibleModelList = input.results.some((result) => result.ok);
+  const hasAccessibleModelList = input.results.some((result) => result.discoveryOk);
   const discoveredModels = sortModelsByGroupPriority(
     [
       ...new Set(
@@ -388,7 +432,7 @@ export function summarizeTagAvailability(input: {
 
       return {
         ok: false,
-        discoveredModel: pickDiscoveredModel(discoveredModels, tagGroup),
+        discoveredModel: null,
         message: `${label} 已发现模型：${preview}${suffix}（未逐个验证）`,
       };
     }
@@ -414,16 +458,21 @@ export function buildCombinedTestMessage(input: {
   anthropicResult: ManagedKeyTestResult;
   openAiResult: ManagedKeyTestResult;
 }) {
-  const parts = [input.claudeSummary.message, input.codexSummary.message].filter(
+  const summaryParts = [input.claudeSummary.message, input.codexSummary.message].filter(
     (message) =>
-      !/^\s*(Claude|Codex)\s*可用（测试模型：/.test(message) &&
-      !/^\s*(Claude|Codex)\s*(已发现模型|未验证)/.test(message),
+      !/^\s*(Claude|Codex)\s*可用（测试模型：/.test(message),
   );
+
+  if (/^\s*(Claude|Codex)\s*已发现模型：/.test(summaryParts[0] ?? "")) {
+    summaryParts[0] = summaryParts[0]!.replace(/^\s*(Claude|Codex)\s*/, "");
+  }
+
+  const parts = [...summaryParts];
 
   parts.push(
     input.anthropicResult.attemptedModels.length > 0
       ? `Claude 模型测试：${buildAttemptSummary(input.anthropicResult.attemptedModels)}`
-      : input.anthropicResult.discoveredModels.length > 0
+      : input.anthropicResult.discoveryOk
         ? "Claude 模型测试：未验证（接口可用）"
         : "Claude 模型测试：无可用模型",
   );
@@ -431,7 +480,7 @@ export function buildCombinedTestMessage(input: {
   parts.push(
     input.openAiResult.attemptedModels.length > 0
       ? `Codex 模型测试：${buildAttemptSummary(input.openAiResult.attemptedModels)}`
-      : input.openAiResult.discoveredModels.length > 0
+      : input.openAiResult.discoveryOk
         ? "Codex 模型测试：未验证（接口可用）"
         : "Codex 模型测试：无可用模型",
   );

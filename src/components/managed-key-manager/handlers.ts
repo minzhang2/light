@@ -198,7 +198,7 @@ export function createHandlers(deps: HandlerDependencies) {
             return item;
           }
 
-          const discoveredModels = payload.result?.discoveredModels ?? [];
+          const validatedModels = payload.result?.validatedModels ?? [];
           const discoveredModel = payload.result?.discoveredModel ?? null;
           if (!payload.key) {
             return item;
@@ -210,7 +210,7 @@ export function createHandlers(deps: HandlerDependencies) {
               payload.key.availableModels,
               payload.key.model,
             ),
-            discoveredModels,
+            validatedModels,
             discoveredModel,
           );
 

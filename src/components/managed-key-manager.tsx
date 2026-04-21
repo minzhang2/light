@@ -81,6 +81,10 @@ export function ManagedKeyManager({
   const repairForm = useRepairFormState();
   const hasTestingKeys = Object.keys(testingIds).length > 0;
 
+  function areStringArraysEqual(left: string[], right: string[]) {
+    return left.length === right.length && left.every((item, index) => item === right[index]);
+  }
+
   const handlers = createHandlers({
     keys,
     setKeys,
@@ -283,9 +287,29 @@ export function ManagedKeyManager({
         throw new Error("保存失败：未返回配置数据");
       }
 
+      const shouldInvalidateTestCache =
+        !areStringArraysEqual(globalConfig.preferredModels, payload.config.preferredModels) ||
+        globalConfig.exhaustiveModelTesting !== payload.config.exhaustiveModelTesting;
+
       setGlobalConfig(payload.config);
+      if (shouldInvalidateTestCache) {
+        setKeys((current) =>
+          current.map((item) => ({
+            ...item,
+            availableModels: [],
+            lastTestStatus: null,
+            lastTestMessage: null,
+            lastTestAt: null,
+          })),
+        );
+      }
       setShowSettings(false);
-      toast({ tone: "success", message: "全局配置已保存。" });
+      toast({
+        tone: "success",
+        message: shouldInvalidateTestCache
+          ? "全局配置已保存，测试缓存已失效，请重新测试 key。"
+          : "全局配置已保存。",
+      });
     } catch (error) {
       toast({
         tone: "error",
