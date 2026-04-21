@@ -14,7 +14,6 @@ import type {
 import {
   parseJsonRecord,
   parseJsonArray,
-  buildManagedKeyTestCacheResetData,
   buildCopyText,
   buildExportText,
   stringifyAliases,
@@ -75,9 +74,6 @@ export function mergeExistingWithParsed(
   aliases.delete(entry.name);
   aliases.delete("");
 
-  const shouldResetTestCache =
-    Boolean(existing) && existing?.fingerprint !== entry.fingerprint;
-
   return {
     name: entry.name,
     aliases: stringifyAliases([...aliases]),
@@ -92,7 +88,6 @@ export function mergeExistingWithParsed(
       ...entry.extraEnv,
     }),
     fingerprint: entry.fingerprint,
-    ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
     ...(typeof options?.isTestable === "boolean"
       ? { isTestable: options.isTestable }
       : {}),
@@ -195,7 +190,6 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
     model,
     launchCommand,
   ]);
-  const shouldResetTestCache = existing.fingerprint !== nextFingerprint;
 
   const conflicting = await prisma.managedKey.findFirst({
     where: {
@@ -236,7 +230,6 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
           isTestable,
           isPinned,
           fingerprint: nextFingerprint,
-          ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
         },
       });
     });
@@ -256,7 +249,6 @@ export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput)
         isTestable,
         isPinned,
         fingerprint: nextFingerprint,
-        ...(shouldResetTestCache ? buildManagedKeyTestCacheResetData() : {}),
       },
     });
 

@@ -1,16 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { GlobalConfig } from "@/features/managed-keys/types";
-import {
-  buildManagedKeyTestCacheResetData,
-  parseJsonArray,
-  parseBooleanValue,
-  normalizeModelConfig,
-} from "./utils";
-
-function areStringArraysEqual(left: string[], right: string[]) {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
-}
+import { parseJsonArray, parseBooleanValue, normalizeModelConfig } from "./utils";
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
   const preferredRecord = await prisma.appConfig.findUnique({
@@ -40,11 +31,6 @@ export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<Gl
     config.exhaustiveModelTesting !== undefined
       ? Boolean(config.exhaustiveModelTesting)
       : currentConfig.exhaustiveModelTesting;
-  const shouldInvalidateTestCache =
-    (config.preferredModels !== undefined &&
-      !areStringArraysEqual(currentConfig.preferredModels, nextPreferredModels)) ||
-    (config.exhaustiveModelTesting !== undefined &&
-      currentConfig.exhaustiveModelTesting !== nextExhaustiveModelTesting);
 
   if (config.preferredModels !== undefined) {
     await prisma.appConfig.upsert({
@@ -69,12 +55,6 @@ export async function setGlobalConfig(config: Partial<GlobalConfig>): Promise<Gl
       update: {
         value: JSON.stringify(nextExhaustiveModelTesting),
       },
-    });
-  }
-
-  if (shouldInvalidateTestCache) {
-    await prisma.managedKey.updateMany({
-      data: buildManagedKeyTestCacheResetData(),
     });
   }
 
