@@ -465,7 +465,9 @@ export function MailContainer() {
           >
             <MenuIcon className="h-5 w-5" />
           </button>
-          <span className="flex-1 text-center text-sm font-medium">临时邮箱</span>
+          <span className="flex-1 text-center text-sm font-medium truncate px-2">
+            {activeMailbox ? activeMailbox.email : "临时邮箱"}
+          </span>
           <button
             type="button"
             onClick={() => void allocateMailbox()}

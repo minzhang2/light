@@ -555,7 +555,7 @@ export function NotesWorkspace({
       </div>
 
       <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
-        <SheetContent side="left" className="w-[86vw] max-w-sm p-0">
+        <SheetContent side="left" className="w-[86vw] max-w-sm p-0" showCloseButton={false}>
           <SheetHeader className="sr-only">
             <SheetTitle>笔记列表</SheetTitle>
             <SheetDescription>在移动端查看和切换笔记。</SheetDescription>
