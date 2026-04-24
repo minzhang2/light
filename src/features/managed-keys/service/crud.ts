@@ -147,6 +147,66 @@ export async function removeManagedKey(id: string) {
   return listManagedKeys();
 }
 
+export async function duplicateManagedKey(id: string) {
+  const existing = await prisma.managedKey.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    throw new Error("未找到对应的 key。");
+  }
+
+  // Build a unique name by appending " copy" (and incrementing if needed)
+  const baseName = existing.name.endsWith(" copy")
+    ? existing.name
+    : `${existing.name} copy`;
+
+  let finalName = baseName;
+  let counter = 2;
+  while (await prisma.managedKey.findFirst({ where: { name: finalName } })) {
+    finalName = `${baseName} ${counter}`;
+    counter += 1;
+  }
+
+  console.info("[managed-keys] duplicating key", {
+    id,
+    originalName: existing.name,
+    newName: finalName,
+  });
+
+  // Include name in fingerprint to differentiate from the original
+  const newFingerprint = buildManagedKeyFingerprint([
+    existing.protocol,
+    existing.baseUrl,
+    existing.secret,
+    existing.model,
+    existing.launchCommand,
+    finalName,
+  ]);
+
+  const created = await prisma.managedKey.create({
+    data: {
+      name: finalName,
+      aliases: existing.aliases,
+      groupName: existing.groupName,
+      protocol: existing.protocol,
+      secret: existing.secret,
+      baseUrl: existing.baseUrl,
+      model: existing.model,
+      launchCommand: existing.launchCommand,
+      extraEnv: existing.extraEnv,
+      fingerprint: newFingerprint,
+      isTestable: existing.isTestable,
+      isPinned: false,
+    },
+  });
+
+  return {
+    key: toListItem(created),
+    keys: await listManagedKeys(),
+  };
+}
+
 export async function updateManagedKey(id: string, input: ManagedKeyUpdateInput) {
   const existing = await prisma.managedKey.findUnique({
     where: { id },

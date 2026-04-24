@@ -49,6 +49,19 @@ export async function deleteKey(id: string) {
   return payload;
 }
 
+export async function duplicateKey(id: string) {
+  const response = await fetch(`/api/keys/${id}`, { method: "POST" });
+  const payload = (await response.json().catch(() => null)) as
+    | { message?: string; key?: ManagedKeyListItem; keys?: ManagedKeyListItem[] }
+    | null;
+
+  if (!response.ok || !payload?.key || !payload.keys) {
+    throw new Error(payload?.message ?? "复制失败。");
+  }
+
+  return payload;
+}
+
 export async function updateKey(id: string, patch: ManagedKeyUpdateInput) {
   const response = await fetch(`/api/keys/${id}`, {
     method: "PATCH",

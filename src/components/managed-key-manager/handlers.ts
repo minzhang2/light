@@ -16,6 +16,40 @@ export interface HandlerDependencies {
 }
 
 export function createHandlers(deps: HandlerDependencies) {
+  async function handleDuplicate(item: ManagedKeyListItem) {
+    console.info("[managed-key-manager] duplicating key", {
+      id: item.id,
+      name: item.name,
+    });
+
+    deps.setSavingIds((current) => ({ ...current, [item.id]: true }));
+
+    try {
+      const payload = await api.duplicateKey(item.id);
+
+      if (!payload.key || !payload.keys) {
+        throw new Error("复制失败：未返回 key 数据");
+      }
+
+      deps.setKeys(payload.keys);
+      deps.toast({
+        tone: "success",
+        message: payload.message ?? `已复制为 ${payload.key.name}。`,
+      });
+    } catch (error) {
+      deps.toast({
+        tone: "error",
+        message: error instanceof Error ? error.message : "复制失败。",
+      });
+    } finally {
+      deps.setSavingIds((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+    }
+  }
+
   async function handleDelete(id: string) {
     deps.setDeletingIds((current) => ({ ...current, [id]: true }));
 
@@ -242,6 +276,7 @@ export function createHandlers(deps: HandlerDependencies) {
   }
 
   return {
+    handleDuplicate,
     handleDelete,
     startEditing,
     cancelEditing,

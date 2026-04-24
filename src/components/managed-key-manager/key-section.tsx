@@ -19,6 +19,7 @@ interface KeySectionProps {
   editDrafts: Record<string, EditDraft>;
   onCopyKey: (secret: string) => void;
   onCopyEnv: (text: string) => void;
+  onDuplicate: (key: ManagedKeyListItem) => void;
   onDelete: (id: string) => void;
   onTest: (id: string) => void;
   onTogglePinned: (key: ManagedKeyListItem) => void;
@@ -43,6 +44,7 @@ export function KeySection({
   editDrafts,
   onCopyKey,
   onCopyEnv,
+  onDuplicate,
   onDelete,
   onTest,
   onTogglePinned,
@@ -92,6 +94,7 @@ export function KeySection({
                 editDraft={editDrafts[key.id] ?? null}
                 onCopyKey={() => onCopyKey(key.secret)}
                 onCopyEnv={() => onCopyEnv(key.id)}
+                onDuplicate={() => onDuplicate(key)}
                 onDelete={() => onDelete(key.id)}
                 onTest={() => onTest(key.id)}
                 onTogglePinned={() => onTogglePinned(key)}

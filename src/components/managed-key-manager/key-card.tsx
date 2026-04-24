@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   CopyIcon,
+  CopyPlusIcon,
   FileCode2Icon,
   FlaskConicalIcon,
   FlaskConicalOffIcon,
@@ -59,6 +60,7 @@ interface ManagedKeyCardProps {
   editDraft: EditDraft | null;
   onCopyKey: () => void;
   onCopyEnv: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
   onTest: () => void;
   onTogglePinned: () => void;
@@ -79,6 +81,7 @@ export function ManagedKeyCard({
   editDraft,
   onCopyKey,
   onCopyEnv,
+  onDuplicate,
   onDelete,
   onTest,
   onTogglePinned,
@@ -161,6 +164,14 @@ export function ManagedKeyCard({
             onClick={onCopyEnv}
           >
             <FileCode2Icon />
+          </ActionIconButton>
+          <ActionIconButton
+            type="button"
+            tooltip={isSaving ? "复制中..." : "快速复制生成 xinkey"}
+            onClick={onDuplicate}
+            disabled={isDeleting || isTesting || isBatchTesting || isSaving}
+          >
+            <CopyPlusIcon />
           </ActionIconButton>
           <ActionIconButton
             type="button"

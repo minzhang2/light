@@ -647,6 +647,7 @@ export function ManagedKeyManager({
               const key = keys.find((k) => k.id === keyId);
               if (key) copyToClipboard(buildKeyEnvCopyText(key), "环境变量");
             }}
+            onDuplicate={handlers.handleDuplicate}
             onDelete={setDeleteTargetId}
             onTest={handlers.handleTest}
             onTogglePinned={handlers.handleTogglePinned}
@@ -674,6 +675,7 @@ export function ManagedKeyManager({
               const key = keys.find((k) => k.id === keyId);
               if (key) copyToClipboard(buildKeyEnvCopyText(key), "环境变量");
             }}
+            onDuplicate={handlers.handleDuplicate}
             onDelete={setDeleteTargetId}
             onTest={handlers.handleTest}
             onTogglePinned={handlers.handleTogglePinned}
@@ -701,6 +703,7 @@ export function ManagedKeyManager({
               const key = keys.find((k) => k.id === keyId);
               if (key) copyToClipboard(buildKeyEnvCopyText(key), "环境变量");
             }}
+            onDuplicate={handlers.handleDuplicate}
             onDelete={setDeleteTargetId}
             onTest={handlers.handleTest}
             onTogglePinned={handlers.handleTogglePinned}
@@ -728,6 +731,7 @@ export function ManagedKeyManager({
               const key = keys.find((k) => k.id === keyId);
               if (key) copyToClipboard(buildKeyEnvCopyText(key), "环境变量");
             }}
+            onDuplicate={handlers.handleDuplicate}
             onDelete={setDeleteTargetId}
             onTest={handlers.handleTest}
             onTogglePinned={handlers.handleTogglePinned}
