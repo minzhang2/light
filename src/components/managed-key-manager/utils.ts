@@ -16,22 +16,6 @@ export function inferLaunchCommand(
     : "claude";
 }
 
-export function getKeyAvailableModels(key: ManagedKeyListItem) {
-  const models = new Set<string>();
-
-  for (const model of key.availableModels) {
-    if (model) {
-      models.add(model);
-    }
-  }
-
-  if (key.model) {
-    models.add(key.model);
-  }
-
-  return [...models];
-}
-
 export function mergeAvailableModels(
   currentModels: string[],
   discoveredModels: string[],

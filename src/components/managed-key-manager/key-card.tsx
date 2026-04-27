@@ -1,8 +1,5 @@
-import { useState } from "react";
 import {
   CheckIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
   CopyIcon,
   CopyPlusIcon,
   FileCode2Icon,
@@ -20,8 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ManagedKeyListItem } from "@/features/managed-keys/types";
 import type { EditDraft } from "./types";
 import { StatusDot, TestMessage } from "./status-components";
-import { AvailableModelTags } from "./model-tags";
-import { getKeyAvailableModels, getSupportedProviders, formatDateTime } from "./utils";
+import { getSupportedProviders, formatDateTime } from "./utils";
 
 function ActionIconButton({
   tooltip,
@@ -91,11 +87,8 @@ export function ManagedKeyCard({
   onChangeEditDraft,
   onSaveEdit,
 }: ManagedKeyCardProps) {
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const visibleModels = getKeyAvailableModels(item);
   const supportedProviders = getSupportedProviders(item.lastTestMessage);
-  const hasExpandableContent = visibleModels.length > 0 || !!item.lastTestMessage || isEditing;
-  const expanded = isEditing || detailsExpanded;
+  const hasDetailContent = isEditing || !!item.lastTestMessage;
   const editFieldClassName = "h-8 rounded-md px-2 text-sm";
 
   return (
@@ -225,31 +218,11 @@ export function ManagedKeyCard({
           >
             <Trash2Icon />
           </ActionIconButton>
-          {hasExpandableContent ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-lg"
-              className="size-8 justify-self-start rounded-[0.9rem] md:size-9 md:rounded-lg"
-              onClick={() => setDetailsExpanded((v) => !v)}
-              aria-label={expanded ? "收起" : "展开"}
-            >
-              {expanded ? <ChevronUpIcon className="h-4 w-4" /> : <ChevronDownIcon className="h-4 w-4" />}
-            </Button>
-          ) : null}
         </div>
       </div>
 
-      {/* Test message always visible when collapsed */}
-      {!isEditing && !expanded && item.lastTestMessage ? (
-        <div className="px-4 pb-2">
-          <TestMessage message={item.lastTestMessage} status={item.lastTestStatus} />
-        </div>
-      ) : null}
-
-      {/* Expandable detail section */}
-      {expanded && (
-        <div className="space-y-2.5 border-t border-border/70 px-4 py-2.5">
+      {hasDetailContent ? (
+        <div className="space-y-2.5 px-4 pb-2.5 pt-0">
           {isEditing && editDraft ? (
             <div className="grid gap-2.5 md:grid-cols-3">
               <label className="space-y-0.5">
@@ -316,25 +289,15 @@ export function ManagedKeyCard({
             </div>
           ) : null}
 
-          {!isEditing && item.model ? (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-foreground/50 font-medium">默认模型</span>
-              <span className="text-muted-foreground">{item.model}</span>
-            </div>
-          ) : null}
-
-          {!isEditing && visibleModels.length > 0 ? (
-            <div>
-              <p className="mb-1.5 text-xs font-medium text-foreground/60">可用模型</p>
-              <AvailableModelTags models={visibleModels} />
-            </div>
-          ) : null}
-
           {!isEditing && item.lastTestMessage ? (
-            <TestMessage message={item.lastTestMessage} status={item.lastTestStatus} />
+            <TestMessage
+              key={`${item.lastTestStatus}:${item.lastTestMessage}`}
+              message={item.lastTestMessage}
+              status={item.lastTestStatus}
+            />
           ) : null}
         </div>
-      )}
+      ) : null}
     </article>
   );
 }

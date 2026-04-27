@@ -10,10 +10,10 @@ interface TestMessageProps {
 }
 
 export function TestMessage({ message, status }: TestMessageProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(status === "success");
   const normalizedMessage = normalizeProviderLabels(message);
   const isCollapsible =
-    normalizedMessage.length > 120 || normalizedMessage.includes("\n");
+    status === "error" || normalizedMessage.length > 120 || normalizedMessage.includes("\n");
   const toneClassName =
     status === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -53,10 +53,6 @@ export function TestMessage({ message, status }: TestMessageProps) {
     );
   }
 
-  function renderHighlightedInline(text: string) {
-    return renderHighlightedLine(text.replace(/\n+/g, " "), 0);
-  }
-
   return (
     <div className={`rounded-lg border px-3 py-2 text-xs ${toneClassName}`}>
       {expanded || !isCollapsible ? (
@@ -80,7 +76,7 @@ export function TestMessage({ message, status }: TestMessageProps) {
       ) : (
         <div className="flex items-center gap-1.5">
           <div className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
-            {renderHighlightedInline(normalizedMessage)}
+            {renderHighlightedLine(normalizedMessage.replace(/\n+/g, " "), 0)}
           </div>
           <Button
             type="button"
