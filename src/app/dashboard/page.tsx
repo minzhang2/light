@@ -15,8 +15,8 @@ import { isEnvironmentAdminEmail } from "@/lib/auth/admin";
 import { requireSession } from "@/lib/auth/require-session";
 
 export const metadata: Metadata = {
-  title: "控制台",
-  description: "登录后页面",
+  title: "仪表盘",
+  description: "登录后的常用入口汇总",
 };
 
 export default function DashboardPage() {
@@ -35,7 +35,7 @@ async function DashboardPageContent({
 
   return (
     <>
-      <DashboardPageHeader title="控制台" />
+      <DashboardPageHeader title="仪表盘" />
 
       <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

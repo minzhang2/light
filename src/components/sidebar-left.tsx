@@ -26,47 +26,35 @@ export function SidebarLeft({
   const pathname = usePathname()
   const navMainSections = [
     {
-      title: "仪表盘",
+      title: "工作区",
       items: [
         {
           title: "聊天",
           url: "/dashboard/chat",
-          icon: (
-            <MessageCircleIcon
-            />
-          ),
+          icon: <MessageCircleIcon />,
           isActive: pathname.startsWith("/dashboard/chat"),
         },
         {
           title: "笔记",
           url: "/dashboard/notes",
-          icon: (
-            <FileTextIcon
-            />
-          ),
+          icon: <FileTextIcon />,
           isActive: pathname.startsWith("/dashboard/notes"),
+        },
+        {
+          title: "Key 管理",
+          url: "/dashboard/keys",
+          icon: <KeyRoundIcon />,
+          isActive: pathname.startsWith("/dashboard/keys"),
         },
       ],
     },
     {
-      title: "设置",
+      title: "工具箱",
       items: [
-        {
-          title: "Key 管理",
-          url: "/dashboard/keys",
-          icon: (
-            <KeyRoundIcon
-            />
-          ),
-          isActive: pathname.startsWith("/dashboard/keys"),
-        },
         {
           title: "临时邮箱",
           url: "/dashboard/mail",
-          icon: (
-            <MailIcon
-            />
-          ),
+          icon: <MailIcon />,
           isActive: pathname.startsWith("/dashboard/mail"),
         },
       ],

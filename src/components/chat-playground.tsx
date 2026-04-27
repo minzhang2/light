@@ -266,7 +266,7 @@ export function ChatPlayground({
     const content = input.trim();
 
     if (!selectedKey) {
-      toast({ tone: "error", message: "当前没有可用的 key，请先到 Key 管理页测试 key。" });
+      toast({ tone: "error", message: "当前没有可用的 key，请先到 Key 管理测试 key。" });
       return;
     }
 
@@ -360,7 +360,7 @@ export function ChatPlayground({
     }
 
     if (!selectedKey) {
-      toast({ tone: "error", message: "当前没有可用的 key，请先到 Key 管理页测试 key。" });
+      toast({ tone: "error", message: "当前没有可用的 key，请先到 Key 管理测试 key。" });
       return;
     }
 

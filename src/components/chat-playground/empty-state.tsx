@@ -12,7 +12,7 @@ export function EmptyKeysState() {
           </div>
           <h2 className="text-xl font-semibold">还没有可用的聊天 key</h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            这个聊天页只展示已测试通过、并且识别出可用模型的 key。先去 Key 管理页导入并测试 key，再回来聊天。
+            这个聊天页只展示已测试通过、并且识别出可用模型的 key。先去 Key 管理导入并测试 key，再回来聊天。
           </p>
           <Button
             nativeButton={false}
