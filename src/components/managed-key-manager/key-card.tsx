@@ -160,7 +160,7 @@ export function ManagedKeyCard({
           </ActionIconButton>
           <ActionIconButton
             type="button"
-            tooltip={isSaving ? "复制中..." : "快速复制生成 xinkey"}
+            tooltip={isSaving ? "复制中..." : "快速复制生成新 key"}
             onClick={onDuplicate}
             disabled={isDeleting || isTesting || isBatchTesting || isSaving}
           >
