@@ -184,6 +184,8 @@ export async function duplicateManagedKey(id: string) {
     finalName,
   ]);
 
+  const newCreatedAt = new Date(existing.createdAt.getTime() - 1000);
+
   const created = await prisma.managedKey.create({
     data: {
       name: finalName,
@@ -197,7 +199,11 @@ export async function duplicateManagedKey(id: string) {
       extraEnv: existing.extraEnv,
       fingerprint: newFingerprint,
       isTestable: existing.isTestable,
-      isPinned: false,
+      isPinned: existing.isPinned,
+      lastTestStatus: existing.lastTestStatus,
+      lastTestMessage: existing.lastTestMessage,
+      lastTestAt: existing.lastTestAt,
+      createdAt: newCreatedAt,
     },
   });
 
