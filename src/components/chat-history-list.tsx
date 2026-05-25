@@ -177,7 +177,7 @@ export function ChatHistoryList({
         ))}
       </div>
       <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => { if (!open) setPendingDeleteId(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent onConfirm={() => void confirmDelete()}>
           <AlertDialogHeader>
             <AlertDialogTitle>删除对话</AlertDialogTitle>
             <AlertDialogDescription>确定要删除这个对话吗？此操作无法撤销。</AlertDialogDescription>

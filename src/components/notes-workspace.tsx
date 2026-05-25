@@ -584,7 +584,13 @@ export function NotesWorkspace({
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onConfirm={() => {
+            if (pendingDeleteId && busyAction !== "deleting") {
+              void handleDeleteDocument(pendingDeleteId);
+            }
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除这篇笔记？</AlertDialogTitle>
             <AlertDialogDescription>

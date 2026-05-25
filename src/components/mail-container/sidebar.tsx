@@ -189,7 +189,14 @@ export function MailboxSidebar({
         open={pendingDelete !== null}
         onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onConfirm={() => {
+            if (pendingDelete) {
+              onDeleteMailbox(pendingDelete);
+              setPendingDelete(null);
+            }
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除</AlertDialogTitle>
             <AlertDialogDescription>

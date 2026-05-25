@@ -752,7 +752,13 @@ export function ManagedKeyManager({
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onConfirm={() => {
+            if (deleteTargetId && !deletingIds[deleteTargetId]) {
+              void handlers.handleDelete(deleteTargetId);
+            }
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除这个 key？</AlertDialogTitle>
             <AlertDialogDescription>

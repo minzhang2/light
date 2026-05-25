@@ -194,7 +194,13 @@ export function InviteCodeManager({
           }
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          onConfirm={() => {
+            if (deleteTargetId && !deletingIds[deleteTargetId]) {
+              void handleDelete(deleteTargetId);
+            }
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除？</AlertDialogTitle>
             <AlertDialogDescription>

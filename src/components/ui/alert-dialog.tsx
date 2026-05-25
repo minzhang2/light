@@ -29,11 +29,17 @@ function AlertDialogOverlay({
   );
 }
 
+type AlertDialogContentProps = DialogPrimitive.Popup.Props & {
+  onConfirm?: () => void;
+};
+
 function AlertDialogContent({
   className,
   children,
+  onConfirm,
+  onKeyDown,
   ...props
-}: DialogPrimitive.Popup.Props) {
+}: AlertDialogContentProps) {
   return (
     <AlertDialogPortal>
       <AlertDialogOverlay />
@@ -44,6 +50,23 @@ function AlertDialogContent({
             "w-full max-w-md rounded-2xl border border-border/70 bg-background p-6 shadow-xl transition duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0",
             className,
           )}
+          onKeyDown={(event) => {
+            onKeyDown?.(event);
+            if (
+              onConfirm &&
+              event.key === "Enter" &&
+              !event.defaultPrevented &&
+              !event.nativeEvent.isComposing
+            ) {
+              const target = event.target as HTMLElement | null;
+              const tag = target?.tagName;
+              if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+                return;
+              }
+              event.preventDefault();
+              onConfirm();
+            }
+          }}
           {...props}
         >
           {children}
