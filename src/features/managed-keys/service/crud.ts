@@ -207,6 +207,12 @@ export async function duplicateManagedKey(id: string) {
     },
   });
 
+  // Bump original's updatedAt so it sorts above the duplicate in pinned section
+  await prisma.managedKey.update({
+    where: { id: existing.id },
+    data: { name: existing.name },
+  });
+
   return {
     key: toListItem(created),
     keys: await listManagedKeys(),
